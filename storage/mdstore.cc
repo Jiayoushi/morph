@@ -10,8 +10,6 @@
 #include <mds/namenode.h>
 #include <common/utils.h>
 
-//using namespace ROCKSDB_NAMESPACE;
-
 namespace morph {
 
 MdStore::MdStore() {
@@ -50,23 +48,22 @@ int MdStore::persist_metadata(const Transaction &transaction) {
 }
 
 void MdStore::write_log(const Log &log, WriteBatch *batch) {
-  std::string key;
-
-  key = std::to_string(log.ino) + "-" + std::to_string(log.type);
+  const std::string &key = log.key;
+  const std::string &data = log.data;
 
   switch (log.op) {
     case CREATE_INODE:
       if (batch) {
-        batch->Put(key, log.data);
+        batch->Put(key, data);
       } else {
-        db->Put(WriteOptions(), key, log.data);
+        db->Put(WriteOptions(), key, data);
       }
       break;
     case UPDATE_INODE:
       if (batch) {
-        batch->Put(key, log.data);
+        batch->Put(key, data);
       } else {
-        db->Put(WriteOptions(), key, log.data);
+        db->Put(WriteOptions(), key, data);
       }
       break;
     case REMOVE_INODE:

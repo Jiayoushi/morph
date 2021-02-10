@@ -27,14 +27,14 @@ void storage_thread_func(morph::StorageServer *storage) {
   storage->run();
 }
 
-void single_client_directories() {
+void single_client_generic() {
   morph::StorageServer storage(storage_server_port);
   std::thread storage_thread(storage_thread_func, &storage);
-  //storage_thread.detach();
+  storage_thread.detach();
 
   morph::MetadataServer mds(mds_server_port, storage_server_ip, storage_server_port);
   std::thread mds_thread(mds_thread_func, &mds);
-  //mds_thread.detach();
+  mds_thread.detach();
 
   morph::MorphFsClient client(mds_server_ip, mds_server_port, 11);
   morph::DIR *dp;
@@ -50,12 +50,14 @@ void single_client_directories() {
   assert(stat.st_mode == 777);
   assert(stat.st_uid == 11);
 
+
   assert(client.mkdir("/nice", 666) < 0);
   assert(morph::error_code == EEXIST);
   assert(client.mkdir("/nicex/bro", 666) < 0);
   assert(morph::error_code == ENOENT);
   assert(client.mkdir("/nice/brox/bro", 666));
   assert(morph::error_code == ENOENT);
+
 
   assert(client.mkdir("/okay", 556) == 0);
   assert(client.stat("/okay", &stat) == 0);
@@ -83,6 +85,7 @@ void single_client_directories() {
   assert(strcmp(dirp->d_name, "nice") == 0);
   assert(dirp->d_type == morph::INODE_TYPE::DIRECTORY);
 
+
   // Read /okay
   dirp = client.readdir(dp);
   assert(dirp != nullptr);
@@ -93,11 +96,14 @@ void single_client_directories() {
   dirp = client.readdir(dp);
   assert(dirp == nullptr);
 
+  assert(client.rmdir("/nice") == -1);
+  assert(client.rmdir("/nice/nice2") == -1);
+  assert(client.rmdir("/nice/nice2/nice3") == 0);
+  assert(client.rmdir("/nice/nice2") == 0);
+  assert(client.rmdir("/nice") == 0);
+
   mds.stop();
   storage.stop();
-
-  storage_thread.join();
-  mds_thread.join();
 }
 
 struct Item {
@@ -181,7 +187,7 @@ int main() {
   test_msgpack();
   test_rocksdb();
 
-  single_client_directories();
+  single_client_generic();
 
   std::cout << "All Tests Passed." << std::endl;
 

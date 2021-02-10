@@ -23,7 +23,7 @@ class MetadataServer: NoCopy {
   StatReply stat(StatArgs);
   OpendirReply opendir(OpendirArgs);
   ReaddirReply readdir(ReaddirArgs);
-  void rmdir();
+  RmdirReply rmdir(RmdirArgs);
 
  private:
   std::shared_ptr<spdlog::logger> logger;

@@ -59,7 +59,7 @@ struct Dentry {
 
 class InodeDirectory: public Inode {
  public:
-  std::vector<Dentry> children;
+  std::vector<std::shared_ptr<Dentry>> children;
 
   MSGPACK_DEFINE_ARRAY(type, ino, mode, uid, children);
 
@@ -67,28 +67,37 @@ class InodeDirectory: public Inode {
   InodeDirectory(type_t type, ino_t ino, mode_t mode, uid_t uid):
     Inode(type, ino, mode, uid) {}
 
-  int find_dentry(const char *name, Dentry *dentry) {
-    for (const Dentry &child: children) {
-      if (strcmp(child.name, name) == 0) {
-        if (dentry != nullptr) {
-          memcpy(dentry, &child, sizeof(Dentry));
-        }
-        return 0;
+  std::shared_ptr<Dentry> find_dentry(const char *name) {
+    for (const auto &child: children) {
+      if (strcmp(child->name, name) == 0) {
+        return std::shared_ptr<Dentry>(child);
       }
     }
-    return -1;
+    return nullptr;
   }
 
   void add_dentry(const char *name, ino_t ino) {
-    children.emplace_back(name, ino);
+    children.emplace_back(std::make_shared<Dentry>(name, ino));
   }
 
-  int get_dentry(int index, Dentry *dentry) {
-    if (index < 0 || index >= children.size()) {
-      return -1;
+  void remove_dentry(ino_t ino) {
+    for (auto iter = children.begin(); iter != children.end(); ++iter) {
+      if ((*iter)->ino == ino) {
+        children.erase(iter);
+        return;
+      }
     }
-    memcpy(dentry, &(children[index]), sizeof(Dentry));
-    return 0;
+  }
+
+  bool empty() {
+    return children.empty();
+  }
+
+  std::shared_ptr<Dentry> get_dentry(int index) {
+    if (index < 0 || index >= children.size()) {
+      return nullptr;
+    }
+    return children[index];
   }
 };
 
@@ -102,6 +111,7 @@ class NameNode: NoCopy {
   int stat(cid_t, const char *pathname, stat *buf);
   int opendir(const char *pathname);
   int readdir(const DIR *dir, dirent *dirent);
+  int rmdir(const char *pathname);
 
  private:
   /* Directory management */
@@ -118,6 +128,8 @@ class NameNode: NoCopy {
   std::shared_ptr<InodeType> allocate_inode(type_t type, mode_t mode, uid_t uid);
 
   std::shared_ptr<Inode> get_inode(ino_t ino);
+
+  void remove_inode(ino_t ino);
 
   std::atomic<ino_t> next_inode_number;
   std::unordered_map<ino_t, std::shared_ptr<Inode>> inode_map;

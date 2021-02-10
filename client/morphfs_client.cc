@@ -50,6 +50,21 @@ DIR *MorphFsClient::opendir(const char *pathname) {
   return nullptr;
 }
 
+int MorphFsClient::rmdir(const char *pathname) {
+  RmdirArgs args;
+  RmdirReply reply;
+
+  args.cid = cid;
+  strcpy(args.pathname, pathname);
+  reply = rpc_client.call("rmdir", args).as<RmdirReply>();
+  if (reply.ret_val == 0) {
+    return 0;
+  }
+
+  error_code = reply.ret_val;
+  return -1;
+}
+
 int MorphFsClient::stat(const char *path, morph::stat *buf) {
   StatArgs args;
   StatReply reply;

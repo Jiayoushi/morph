@@ -33,7 +33,7 @@ int NameNode::mkdir(cid_t cid, const char *pathname, mode_t mode) {
     return ENOENT;
   }
 
-  if (parent->find_dentry(components.back().c_str(), nullptr) == 0) {
+  if (parent->find_dentry(components.back().c_str()) != nullptr) {
     return EEXIST;
   }
 
@@ -51,17 +51,17 @@ int NameNode::mkdir(cid_t cid, const char *pathname, mode_t mode) {
 }
 
 int NameNode::stat(cid_t cid, const char *path, struct morph::stat *buf) {
-  std::shared_ptr<Inode> dentry;
+  std::shared_ptr<Inode> inode;
   std::vector<std::string> components;
 
   components = get_pathname_components(path);
-  dentry = lookup(components);
-  if (dentry == nullptr) {
+  inode = lookup(components);
+  if (inode == nullptr) {
     return -1;
   }
-  buf->st_ino = dentry->ino;
-  buf->st_mode = dentry->mode;
-  buf->st_uid = dentry->uid;
+  buf->st_ino = inode->ino;
+  buf->st_mode = inode->mode;
+  buf->st_uid = inode->uid;
   return 0;
 }
 
@@ -77,11 +77,43 @@ int NameNode::opendir(const char *pathname) {
   return 0;
 }
 
+int NameNode::rmdir(const char *pathname) {
+  std::vector<std::string> components;
+  std::shared_ptr<InodeDirectory> parent;
+  std::shared_ptr<Inode> dir;
+  std::shared_ptr<Dentry> dentry;
+
+  components = get_pathname_components(pathname);
+  parent = lookup_parent(components);
+  if (parent == nullptr) {
+    return ENOENT;
+  }
+  dentry = parent->find_dentry(components.back().c_str());
+  if (dentry == nullptr) {
+    return ENOENT;
+  }
+
+  dir = get_inode(dentry->ino);
+  if (dir->type != INODE_TYPE::DIRECTORY) {
+    return ENOTDIR;
+  }
+
+  std::shared_ptr<InodeDirectory> ptr = std::static_pointer_cast<InodeDirectory>(dir);
+  if (!ptr->empty()) {
+    return ENOTEMPTY;
+  }
+
+  parent->remove_dentry(dentry->ino);
+  remove_inode(dentry->ino);
+
+  return 0;
+}
+
 int NameNode::readdir(const DIR *dir, dirent *dirent) {
   std::vector<std::string> components;
   std::shared_ptr<Inode> ip;
   std::shared_ptr<InodeDirectory> dirp;
-  Dentry dentry;
+  std::shared_ptr<Dentry> dentry;
 
   components = get_pathname_components(dir->pathname);
   ip = lookup(components);
@@ -89,14 +121,15 @@ int NameNode::readdir(const DIR *dir, dirent *dirent) {
     return -1;
   }
   dirp = std::static_pointer_cast<InodeDirectory>(ip);
-  if (dirp->get_dentry(dir->pos, &dentry) < 0) {
+  dentry = dirp->get_dentry(dir->pos);
+  if (dentry == nullptr) {
     return -1;
   }
 
-  ip = get_inode(dentry.ino);
+  ip = get_inode(dentry->ino);
   dirent->d_ino = ip->ino;
   dirent->d_type = ip->type;
-  strcpy(dirent->d_name, dentry.name);
+  strcpy(dirent->d_name, dentry->name);
 
   return 0;
 }
@@ -123,8 +156,8 @@ std::shared_ptr<Inode> NameNode::pathwalk(const std::vector<std::string> &compon
                                            bool stop_at_parent) {
   std::shared_ptr<Inode> parent = root;
   std::shared_ptr<Inode> next = nullptr;
+  std::shared_ptr<Dentry> dentry;
   InodeDirectory *dir;
-  Dentry dentry;
 
   for (size_t i = 0; i < components.size(); ++i) {
     if (stop_at_parent && i == components.size() - 1) {
@@ -133,10 +166,11 @@ std::shared_ptr<Inode> NameNode::pathwalk(const std::vector<std::string> &compon
 
     if (parent->type == INODE_TYPE::DIRECTORY) {
       dir = static_cast<InodeDirectory *>(parent.get());
-      if (dir->find_dentry(components[i].c_str(), &dentry) < 0) {
+      dentry = dir->find_dentry(components[i].c_str());
+      if (dentry == nullptr) {
         return nullptr;
       }
-      next = get_inode(dentry.ino);
+      next = get_inode(dentry->ino);
     }
     if (next == nullptr) {
       return nullptr;
@@ -162,5 +196,8 @@ std::vector<std::string> NameNode::get_pathname_components(const std::string &pa
   return res;
 }
 
+void NameNode::remove_inode(ino_t ino) {
+  inode_map.erase(ino);
+}
 
 }

@@ -7,7 +7,8 @@ namespace morph {
 
 /* Logging */
 const std::string LOGGING_DIRECTORY = "logs";
-const enum spdlog::level::level_enum LOGGING_LEVEL = spdlog::level::debug;
+const enum spdlog::level::level_enum LOGGING_LEVEL = spdlog::level::level_enum::debug;
+const enum spdlog::level::level_enum FLUSH_LEVEL = spdlog::level::level_enum::debug;
 
 /* Filesystem */
 const unsigned short PATHNAME_LIMIT = 128;

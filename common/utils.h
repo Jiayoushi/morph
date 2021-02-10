@@ -15,10 +15,10 @@ std::string serialize(const T &object) {
 }
 
 template <typename T>
-void deserialize(const std::string &object, T &receiver) {
-  clmdep_msgpack::object_handle oh = clmdep_msgpack::unpack(object.data(), object.size());
-  clmdep_msgpack::object deserialized = oh.get();
-  deserialized.convert(receiver);
+void deserialize(const std::string &deserialized, T &object) {
+  clmdep_msgpack::object_handle oh = clmdep_msgpack::unpack(deserialized.data(), deserialized.size());
+  clmdep_msgpack::object obj = oh.get();
+  obj.convert(object);
 }
 
 }

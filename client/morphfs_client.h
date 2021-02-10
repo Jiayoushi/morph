@@ -14,13 +14,15 @@ class MorphFsClient {
 
   int mkdir(const char *pathname, mode_t mode);
   DIR *opendir(const char *pathname);
+  int rmdir(const char *pathname);
+  void closedir();
+
   void open();
   int stat(const char *path, stat *buf);
   dirent *readdir(DIR *);
   void pread();
   void pwrite();
   void remove();
-  void closedir();
 
  private:
   cid_t cid;

@@ -5,6 +5,7 @@
 #include <rpc/server.h>
 #include <common/rpc_args.h>
 #include <storage/mdstore.h>
+#include <mds/namenode.h>
 #include <spdlog/sinks/basic_file_sink.h>
 
 namespace morph {

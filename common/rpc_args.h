@@ -52,14 +52,16 @@ struct ReaddirReply {
   MSGPACK_DEFINE_ARRAY(ret_val, dirent);
 };
 
-struct RemoveArgs {
-
+struct RmdirArgs {
+  cid_t cid;
+  char pathname[PATHNAME_LIMIT];
+  MSGPACK_DEFINE_ARRAY(cid, pathname);
 };
 
-struct RemoveReply {
-
+struct RmdirReply {
+  int ret_val;
+  MSGPACK_DEFINE_ARRAY(ret_val);
 };
-
 
 
 

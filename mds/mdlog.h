@@ -19,17 +19,18 @@ enum Operation {
 
 struct Log {
   op_t op;
-  ino_t ino;
-  type_t type;
+  std::string key;
   std::string data;
 
-  MSGPACK_DEFINE_ARRAY(op, ino, type, data);
+  MSGPACK_DEFINE_ARRAY(op, key, data);
 
   Log() {}
 
   // TODO: is the use of move correct here?
-  Log(Operation o, ino_t i, type_t t, std::string &&d):
-    op(o), ino(i), type(t), data(std::move(d)) {}
+  Log(Operation o, ino_t ino, type_t type, std::string &&d):
+    op(o), data(std::move(d)) {
+      key = std::to_string(ino) + "-" + std::to_string(type);
+    }
 };
 
 struct Transaction {
