@@ -23,7 +23,6 @@ MetadataServer::MetadataServer(const unsigned short mds_port, const std::string 
   }
 
   logger->debug("logger initialized");
-  logger->flush();
 
   rpc_server.bind("mkdir", 
     [this](MkdirArgs args) -> MkdirReply {

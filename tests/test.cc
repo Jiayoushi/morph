@@ -10,14 +10,9 @@
 #include <rocksdb/db.h>
 #include <rocksdb/slice.h>
 #include <rocksdb/options.h>
+#include <tests/test.h>
 
 using namespace ROCKSDB_NAMESPACE;
-
-const std::string mds_server_ip = "127.0.0.1";
-const unsigned short mds_server_port = 8000;
-
-const std::string storage_server_ip = "127.0.0.1";
-const unsigned short storage_server_port = 9000;
 
 void mds_thread_func(morph::MetadataServer *mds) {
   mds->run();
@@ -27,7 +22,34 @@ void storage_thread_func(morph::StorageServer *storage) {
   storage->run();
 }
 
+void Test::test_mkdir() {
+    const std::string mds_server_ip = "127.0.0.1";
+    const unsigned short mds_server_port = 8000;
+    const std::string storage_server_ip = "127.0.0.1";
+    const unsigned short storage_server_port = 9000;
+
+    morph::StorageServer storage(storage_server_port);
+    std::thread storage_thread(storage_thread_func, &storage);
+    storage_thread.detach();
+
+    morph::MetadataServer mds(mds_server_port, storage_server_ip, storage_server_port);
+    std::thread mds_thread(mds_thread_func, &mds);
+    mds_thread.detach();
+
+    morph::MorphFsClient client(mds_server_ip, mds_server_port, 11);
+
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    client.mkdir("/nice", 666);
+}
+
+
+
 void single_client_generic() {
+  const std::string mds_server_ip = "127.0.0.1";
+  const unsigned short mds_server_port = 8000;
+  const std::string storage_server_ip = "127.0.0.1";
+  const unsigned short storage_server_port = 9000;
+
   morph::StorageServer storage(storage_server_port);
   std::thread storage_thread(storage_thread_func, &storage);
   storage_thread.detach();
@@ -106,6 +128,7 @@ void single_client_generic() {
   storage.stop();
 }
 
+
 struct Item {
   int item;
   Item(){}
@@ -123,7 +146,7 @@ class MYINODE {
   MSGPACK_DEFINE_ARRAY(inode_number, items);
 };
 
-void test_msgpack() {
+void Test::test_msgpack() {
   MYINODE inode;
   
   std::stringstream ss;
@@ -146,7 +169,7 @@ void test_msgpack() {
   assert(inode2.items[2].item == inode.items[2].item);
 }
 
-void test_rocksdb() {
+void Test::test_rocksdb() {
   const std::string kDBPath = "/tmp/rocksdb_simple_example";
   DB *db;
   Options options;
@@ -183,11 +206,14 @@ void test_rocksdb() {
 }
 
 int main() {
-  // test dependencies
-  test_msgpack();
-  test_rocksdb();
+  Test test;
 
-  single_client_generic();
+  // test dependencies
+  test.test_msgpack();
+  test.test_rocksdb();
+
+  //single_client_generic();
+  test.test_mkdir();
 
   std::cout << "All Tests Passed." << std::endl;
 

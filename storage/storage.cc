@@ -36,7 +36,7 @@ void StorageServer::stop() {
 MetadataChangeReply StorageServer::metadata_change(MetadataChangeArgs args) {
   MetadataChangeReply reply;
 
-  mdstore.persist_metadata(args.transaction);
+  mdstore.persist_metadata(args.handle);
 
   return reply;
 }

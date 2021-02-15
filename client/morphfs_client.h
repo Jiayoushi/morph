@@ -3,10 +3,14 @@
 
 #include <rpc/client.h>
 #include <common/types.h>
+#include <rpc/rpc_wrapper.h>
+#include <tests/test.h>
 
 namespace morph {
 
 extern int error_code;
+
+class Test;
 
 class MorphFsClient {
  public:
@@ -22,11 +26,13 @@ class MorphFsClient {
   dirent *readdir(DIR *);
   void pread();
   void pwrite();
-  void remove();
+  void unlink();
 
  private:
+  friend class Test;
+
   cid_t cid;
-  rpc::client rpc_client;
+  RpcClient rpc_client;
 };
 
 }

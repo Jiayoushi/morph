@@ -33,15 +33,15 @@ struct Log {
     }
 };
 
-struct Transaction {
-  tid_t id;
+struct Handle {
+  hid_t id;
   std::vector<Log> logs;
   MSGPACK_DEFINE_ARRAY(id, logs);
 };
 
 struct MetadataChangeArgs {
-  Transaction transaction;
-  MSGPACK_DEFINE_ARRAY(transaction);
+  Handle handle;
+  MSGPACK_DEFINE_ARRAY(handle);
 };
 
 struct MetadataChangeReply {

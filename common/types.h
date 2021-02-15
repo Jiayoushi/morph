@@ -10,7 +10,7 @@ namespace morph {
 typedef unsigned long cid_t;        // Client's id
 typedef unsigned char type_t;
 typedef unsigned int  op_t;
-typedef uint64_t      tid_t;        // Transaction id
+typedef uint64_t      hid_t;        // Handle id
 
 
 // TODO: gotta move this somewhere else

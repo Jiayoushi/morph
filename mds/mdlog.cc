@@ -11,7 +11,7 @@ void MetadataLog::log(std::vector<Log> &&logs) {
   MetadataChangeArgs args;
   MetadataChangeReply reply;
 
-  args.transaction.logs = std::move(logs);
+  args.handle.logs = std::move(logs);
 
   reply = rpc_client.call("metadata_change", args).as<MetadataChangeReply>();
 }

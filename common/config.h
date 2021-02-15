@@ -17,6 +17,9 @@ const unsigned short FILENAME_LIMIT = 128;
 /* Storage */
 const std::string STORAGE_DIRECTORY = "persist";
 
+/* RPC */
+
+
 }
 
 #endif

@@ -1,4 +1,4 @@
-#include "morphfs_client.h"
+#include <client/morphfs_client.h>
 
 #include <string>
 #include <iostream>
@@ -115,7 +115,7 @@ void MorphFsClient::pwrite() {
 
 }
 
-void MorphFsClient::remove() {
+void MorphFsClient::unlink() {
 
 }
 
