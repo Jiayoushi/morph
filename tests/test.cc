@@ -11,6 +11,7 @@
 #include <rocksdb/slice.h>
 #include <rocksdb/options.h>
 #include <tests/test.h>
+#include <spdlog/fmt/bundled/printf.h>
 
 using namespace ROCKSDB_NAMESPACE;
 
@@ -25,31 +26,32 @@ void storage_thread_func(morph::StorageServer *storage) {
 }
 
 void Test::test_mkdir() {
-    const std::string mds_server_ip = "127.0.0.1";
-    const unsigned short mds_server_port = 8001;
-    const std::string storage_server_ip = "127.0.0.1";
-    const unsigned short storage_server_port = 9001;
+  const std::string mds_server_ip = "127.0.0.1";
+  const unsigned short mds_server_port = 8001;
+  const std::string storage_server_ip = "127.0.0.1";
+  const unsigned short storage_server_port = 9001;
 
-    morph::StorageServer storage(storage_server_port);
-    std::thread storage_thread(storage_thread_func, &storage);
-    storage_thread.detach();
+  morph::StorageServer storage(storage_server_port);
+  std::thread storage_thread(storage_thread_func, &storage);
+  storage_thread.detach();
 
-    morph::MetadataServer mds(mds_server_port, storage_server_ip, storage_server_port);
-    std::thread mds_thread(mds_thread_func, &mds);
-    mds_thread.detach();
+  morph::MetadataServer mds(mds_server_port, storage_server_ip, storage_server_port);
+  std::thread mds_thread(mds_thread_func, &mds);
+  mds_thread.detach();
 
-    morph::MorphFsClient client(mds_server_ip, mds_server_port, 11);
-    client.rpc_client.set_reply_lost_probability(0.3);
-    client.rpc_client.set_request_lost_probability(0.3);
+  morph::MorphFsClient client(mds_server_ip, mds_server_port, 2);
+  client.rpc_client.set_reply_lost_probability(0.3);
+  client.rpc_client.set_request_lost_probability(0.3);
 
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+  std::this_thread::sleep_for(std::chrono::seconds(1));
 
-    std::string dir;
-    for (char d = 'a'; d <= 'z'; ++d) {
-      std::cout << d << std::endl;
-      dir += "/" + d;
-      assert(client.mkdir(dir.c_str(), 666) == 0);
-    }
+  std::string dir;
+  for (char d = 'a'; d <= 'z'; ++d) {
+    dir += fmt::sprintf("/%c", d);
+    assert(client.mkdir(dir.c_str(), 666) == 0);
+  }
+
+  std::cout << "test_mkdir passed" << std::endl;
 }
 
 
@@ -68,7 +70,7 @@ void Test::test_integration() {
   std::thread mds_thread(mds_thread_func, &mds);
   mds_thread.detach();
 
-  morph::MorphFsClient client(mds_server_ip, mds_server_port, 11);
+  morph::MorphFsClient client(mds_server_ip, mds_server_port, 1);
 
   morph::DIR *dp;
   morph::dirent *dirp;
@@ -81,7 +83,7 @@ void Test::test_integration() {
   assert(client.stat("/nice", &stat) == 0);
   assert(stat.st_ino == 2);
   assert(stat.st_mode == 777);
-  assert(stat.st_uid == 11);
+  assert(stat.st_uid == 1);
 
 
   assert(client.mkdir("/nice", 666) < 0);
@@ -96,14 +98,14 @@ void Test::test_integration() {
   assert(client.stat("/okay", &stat) == 0);
   assert(stat.st_ino == 3);
   assert(stat.st_mode == 556);
-  assert(stat.st_uid == 11);
+  assert(stat.st_uid == 1);
 
   assert(client.mkdir("/nice/nice2", 555) == 0);
   assert(client.mkdir("/nice/nice2/nice3", 333) == 0);
   assert(client.stat("/nice/nice2/nice3", &stat) == 0);
   assert(stat.st_ino == 5);
   assert(stat.st_mode == 333);
-  assert(stat.st_uid == 11);
+  assert(stat.st_uid == 1);
   assert(client.stat("/", &stat) == 0);
 
   assert(client.opendir("/wrongdir") == nullptr);
@@ -137,6 +139,8 @@ void Test::test_integration() {
 
   mds.stop();
   storage.stop();
+
+  std::cout << "test_integration passed" << std::endl;
 }
 
 
@@ -178,6 +182,8 @@ void Test::test_msgpack() {
   assert(inode2.items[0].item == inode.items[0].item);
   assert(inode2.items[1].item == inode.items[1].item);
   assert(inode2.items[2].item == inode.items[2].item);
+
+  std::cout << "test_msgpack passed" << std::endl; 
 }
 
 void Test::test_rocksdb() {
@@ -214,6 +220,8 @@ void Test::test_rocksdb() {
   assert(value == "value");
 
   delete db;
+
+  std::cout << "test_rocksdb passed" << std::endl;
 }
 
 }

@@ -4,6 +4,8 @@
 #include <iostream>
 #include <common/rpc_args.h>
 #include <common/types.h>
+#include <rpc/rpc_error.h>
+#include <spdlog/fmt/bundled/printf.h>
 
 namespace morph {
 
@@ -11,7 +13,20 @@ int error_code;
 
 MorphFsClient::MorphFsClient(const std::string &mds_ip, const unsigned short mds_port, const unsigned long cid):
   rpc_client(mds_ip, mds_port),
-  cid(cid) {
+  cid(cid),
+  rid(-1) {
+
+  try {
+    std::string filepath = LOGGING_DIRECTORY + "/client-log-" + std::to_string(cid) + ".txt";
+    logger = spdlog::basic_logger_mt("client_logger_" + std::to_string(cid), filepath, true);
+    logger->set_level(LOGGING_LEVEL);
+    logger->flush_on(FLUSH_LEVEL);
+  } catch (const spdlog::spdlog_ex &ex) {
+    std::cerr << "client Log init failed: " << ex.what() << std::endl;
+    exit(EXIT_FAILURE);
+  }
+
+  logger->debug("logger initialized");
 }
 
 int MorphFsClient::mkdir(const char *pathname, mode_t mode) {
@@ -19,10 +34,23 @@ int MorphFsClient::mkdir(const char *pathname, mode_t mode) {
   MkdirReply reply;
 
   args.cid = cid;
+  args.rid = ++rid;
   args.mode = mode;
   strcpy(args.pathname, pathname);
 
-  reply = rpc_client.call("mkdir", args).as<struct MkdirReply>();
+  logger->debug(fmt::sprintf("mkdir on pathname[%s] rid[%d]", pathname, args.rid));
+
+  while (true) {
+    try {
+      reply = rpc_client.call("mkdir", args).as<struct MkdirReply>();
+    } catch (rpc::timeout &t) {
+      continue;
+    }
+    break;
+  }
+
+  logger->debug(fmt::sprintf("mkdir on pathname[%s] rid[%d] returned[%s]", pathname, args.rid, strerror(reply.ret_val)));
+
   if (reply.ret_val == 0) {
     return 0;
   }
@@ -37,6 +65,7 @@ DIR *MorphFsClient::opendir(const char *pathname) {
   DIR *dir;
 
   args.cid = cid;
+  args.rid = ++rid;
   strcpy(args.pathname, pathname);
   reply = rpc_client.call("opendir", args).as<OpendirReply>();
   if (reply.ret_val == 0) {
@@ -55,6 +84,7 @@ int MorphFsClient::rmdir(const char *pathname) {
   RmdirReply reply;
 
   args.cid = cid;
+  args.rid = ++rid;
   strcpy(args.pathname, pathname);
   reply = rpc_client.call("rmdir", args).as<RmdirReply>();
   if (reply.ret_val == 0) {
@@ -70,6 +100,7 @@ int MorphFsClient::stat(const char *path, morph::stat *buf) {
   StatReply reply;
 
   args.cid = cid;
+  args.rid = ++rid;
   strcpy(args.path, path);
   
   reply = rpc_client.call("stat", args).as<struct StatReply>();
@@ -89,6 +120,7 @@ dirent *MorphFsClient::readdir(morph::DIR *dir) {
   morph::dirent *dirent;
 
   args.cid = cid;
+  args.rid = ++rid;
   memcpy(&args.dir, dir, sizeof(morph::DIR));
   reply = rpc_client.call("readdir", args).as<ReaddirReply>();
   if (reply.ret_val == 0) {

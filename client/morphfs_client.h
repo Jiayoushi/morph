@@ -5,6 +5,7 @@
 #include <common/types.h>
 #include <rpc/rpc_wrapper.h>
 #include <tests/test.h>
+#include <spdlog/sinks/basic_file_sink.h>
 
 namespace morph {
 
@@ -31,7 +32,10 @@ class MorphFsClient {
  private:
   friend class Test;
 
-  cid_t cid;
+  std::shared_ptr<spdlog::logger> logger;
+
+  cid_t cid;                                     // Client ID
+  std::atomic<rid_t> rid;                        // Request ID
   RpcClient rpc_client;
 };
 

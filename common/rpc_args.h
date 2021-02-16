@@ -7,9 +7,10 @@ namespace morph {
 
 struct MkdirArgs {
   cid_t cid;
+  rid_t rid;
   char pathname[PATHNAME_LIMIT];
   mode_t mode;
-  MSGPACK_DEFINE_ARRAY(cid, pathname, mode);
+  MSGPACK_DEFINE_ARRAY(cid, rid, pathname, mode);
 };
 
 struct MkdirReply {
@@ -19,8 +20,9 @@ struct MkdirReply {
 
 struct StatArgs {
   cid_t cid;
+  rid_t rid;
   char path[PATHNAME_LIMIT];
-  MSGPACK_DEFINE_ARRAY(cid, path);
+  MSGPACK_DEFINE_ARRAY(cid, rid, path);
 };
 
 struct StatReply {
@@ -31,8 +33,9 @@ struct StatReply {
 
 struct OpendirArgs {
   cid_t cid;
+  rid_t rid;
   char pathname[PATHNAME_LIMIT];
-  MSGPACK_DEFINE_ARRAY(cid, pathname);
+  MSGPACK_DEFINE_ARRAY(cid, rid, pathname);
 };
 
 struct OpendirReply {
@@ -42,8 +45,9 @@ struct OpendirReply {
 
 struct ReaddirArgs {
   cid_t cid;
+  rid_t rid;
   morph::DIR dir;
-  MSGPACK_DEFINE_ARRAY(cid, dir);
+  MSGPACK_DEFINE_ARRAY(cid, rid, dir);
 };
 
 struct ReaddirReply {
@@ -54,8 +58,9 @@ struct ReaddirReply {
 
 struct RmdirArgs {
   cid_t cid;
+  rid_t rid;
   char pathname[PATHNAME_LIMIT];
-  MSGPACK_DEFINE_ARRAY(cid, pathname);
+  MSGPACK_DEFINE_ARRAY(cid, rid, pathname);
 };
 
 struct RmdirReply {

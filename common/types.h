@@ -7,10 +7,11 @@
 
 namespace morph {
 
-typedef unsigned long cid_t;        // Client's id
-typedef unsigned char type_t;
-typedef unsigned int  op_t;
-typedef uint64_t      hid_t;        // Handle id
+typedef uint64_t cid_t;        // Client's id
+typedef uint8_t  type_t;
+typedef uint32_t op_t;
+typedef uint64_t hid_t;        // Handle id
+typedef uint64_t rid_t;        // Request's id
 
 
 // TODO: gotta move this somewhere else

@@ -10,7 +10,8 @@ namespace morph {
 
 MetadataServer::MetadataServer(const unsigned short mds_port, const std::string &storage_ip, const unsigned short storage_port):
   rpc_server(mds_port),
-  name_node(storage_ip, storage_port) {
+  name_node(storage_ip, storage_port),
+  request_cache() {
 
   try {
     std::string filepath = LOGGING_DIRECTORY + "/mds-log-" + std::to_string(mds_port) + ".txt";
@@ -26,10 +27,7 @@ MetadataServer::MetadataServer(const unsigned short mds_port, const std::string 
 
   rpc_server.bind("mkdir", 
     [this](MkdirArgs args) -> MkdirReply {
-      logger->debug(fmt::sprintf("mkdir invoked %s", args.pathname));
-      const auto &res = this->mkdir(args);
-      logger->debug(fmt::sprintf("mkdir returned %d", res.ret_val));
-      return res;
+      return this->mkdir(args);
     }
   );
 
@@ -83,7 +81,18 @@ void MetadataServer::stop() {
 
 MkdirReply MetadataServer::mkdir(MkdirArgs args) {
   MkdirReply reply;
+
+  logger->debug(fmt::sprintf("mkdir invoked pathname[%s] rid[%d]", args.pathname, args.rid));
+
+  if (request_cache.get_reply<MkdirReply>(args.cid, args.rid, reply) == 0) {
+    logger->debug(fmt::sprintf("mkdir pathname[%s] rid[%d] served out of cache", args.pathname, args.rid));
+    return reply;
+  }
+
   reply.ret_val = name_node.mkdir(args.cid, args.pathname, args.mode);
+
+  request_cache.set_reply<MkdirReply>(args.cid, args.rid, reply);
+  logger->debug(fmt::sprintf("mkdir pathname[%s] rid[%d] success. Return %d", args.pathname, args.rid, reply.ret_val));
   return reply;
 }
 

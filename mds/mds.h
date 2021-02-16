@@ -8,6 +8,7 @@
 #include <mds/mds.h>
 #include <mds/mdlog.h>
 #include <spdlog/sinks/basic_file_sink.h>
+#include <mds/request_cache.h>
 
 namespace morph {
 
@@ -31,6 +32,8 @@ class MetadataServer: NoCopy {
   rpc::server rpc_server;
 
   NameNode name_node;
+
+  RequestCache request_cache;
 };
 
 };
