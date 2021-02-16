@@ -14,6 +14,8 @@
 
 using namespace ROCKSDB_NAMESPACE;
 
+namespace morph {
+
 void mds_thread_func(morph::MetadataServer *mds) {
   mds->run();
 }
@@ -24,9 +26,9 @@ void storage_thread_func(morph::StorageServer *storage) {
 
 void Test::test_mkdir() {
     const std::string mds_server_ip = "127.0.0.1";
-    const unsigned short mds_server_port = 8000;
+    const unsigned short mds_server_port = 8001;
     const std::string storage_server_ip = "127.0.0.1";
-    const unsigned short storage_server_port = 9000;
+    const unsigned short storage_server_port = 9001;
 
     morph::StorageServer storage(storage_server_port);
     std::thread storage_thread(storage_thread_func, &storage);
@@ -37,14 +39,22 @@ void Test::test_mkdir() {
     mds_thread.detach();
 
     morph::MorphFsClient client(mds_server_ip, mds_server_port, 11);
+    client.rpc_client.set_reply_lost_probability(0.3);
+    client.rpc_client.set_request_lost_probability(0.3);
 
     std::this_thread::sleep_for(std::chrono::seconds(1));
-    client.mkdir("/nice", 666);
+
+    std::string dir;
+    for (char d = 'a'; d <= 'z'; ++d) {
+      std::cout << d << std::endl;
+      dir += "/" + d;
+      assert(client.mkdir(dir.c_str(), 666) == 0);
+    }
 }
 
 
 
-void single_client_generic() {
+void Test::test_integration() {
   const std::string mds_server_ip = "127.0.0.1";
   const unsigned short mds_server_port = 8000;
   const std::string storage_server_ip = "127.0.0.1";
@@ -59,6 +69,7 @@ void single_client_generic() {
   mds_thread.detach();
 
   morph::MorphFsClient client(mds_server_ip, mds_server_port, 11);
+
   morph::DIR *dp;
   morph::dirent *dirp;
 
@@ -205,14 +216,16 @@ void Test::test_rocksdb() {
   delete db;
 }
 
+}
+
 int main() {
-  Test test;
+  morph::Test test;
 
   // test dependencies
   test.test_msgpack();
   test.test_rocksdb();
 
-  //single_client_generic();
+  test.test_integration();
   test.test_mkdir();
 
   std::cout << "All Tests Passed." << std::endl;

@@ -17,7 +17,7 @@ StorageServer::StorageServer(const unsigned short storage_port):
 
   try {
     std::string filepath = LOGGING_DIRECTORY + "/storage-log-" + std::to_string(storage_port) + ".txt";
-    logger = spdlog::basic_logger_mt("storage_logger", filepath, true);
+    logger = spdlog::basic_logger_mt("storage_logger_" + std::to_string(storage_port), filepath, true);
     logger->set_level(LOGGING_LEVEL);
   } catch (const spdlog::spdlog_ex &ex) {
     std::cerr << "Log init failed: " << ex.what() << std::endl;

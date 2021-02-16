@@ -14,7 +14,7 @@ MetadataServer::MetadataServer(const unsigned short mds_port, const std::string 
 
   try {
     std::string filepath = LOGGING_DIRECTORY + "/mds-log-" + std::to_string(mds_port) + ".txt";
-    logger = spdlog::basic_logger_mt("mds_logger", filepath, true);
+    logger = spdlog::basic_logger_mt("mds_logger_" + std::to_string(mds_port), filepath, true);
     logger->set_level(LOGGING_LEVEL);
     logger->flush_on(FLUSH_LEVEL);
   } catch (const spdlog::spdlog_ex &ex) {
