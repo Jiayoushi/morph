@@ -20,7 +20,7 @@ enum INODE_TYPE {
 
 class Inode: NoCopy {
  public:
-  type_t type;
+  type_t type;                // file, directory
   ino_t ino;
   mode_t mode;
   uid_t uid;
@@ -120,20 +120,18 @@ class NameNode: NoCopy {
   std::shared_ptr<InodeDirectory> lookup_parent(const std::vector<std::string> &components);
   std::shared_ptr<Inode> pathwalk(const std::vector<std::string> &components, bool stop_at_parent = false);
 
-  std::shared_ptr<InodeDirectory> root;
-
-
   /* Inode management */
   template <typename InodeType>
   std::shared_ptr<InodeType> allocate_inode(type_t type, mode_t mode, uid_t uid);
-
   std::shared_ptr<Inode> get_inode(ino_t ino);
-
   void remove_inode(ino_t ino);
+
+  std::string form_log_key(ino_t ino, type_t type);
+
+  std::shared_ptr<InodeDirectory> root;
 
   std::atomic<ino_t> next_inode_number;
   std::unordered_map<ino_t, std::shared_ptr<Inode>> inode_map;
-
 
   /* Log management */
   MetadataLog mdlog;

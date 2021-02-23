@@ -11,6 +11,7 @@
 #include <rocksdb/slice.h>
 #include <rocksdb/options.h>
 #include <tests/test.h>
+#include <rpc/rpc_wrapper.h>
 #include <spdlog/fmt/bundled/printf.h>
 
 using namespace ROCKSDB_NAMESPACE;
@@ -64,11 +65,11 @@ void Test::test_integration() {
 
   morph::StorageServer storage(storage_server_port);
   std::thread storage_thread(storage_thread_func, &storage);
-  storage_thread.detach();
 
   morph::MetadataServer mds(mds_server_port, storage_server_ip, storage_server_port);
   std::thread mds_thread(mds_thread_func, &mds);
-  mds_thread.detach();
+
+
 
   morph::MorphFsClient client(mds_server_ip, mds_server_port, 1);
 
@@ -137,8 +138,8 @@ void Test::test_integration() {
   assert(client.rmdir("/nice/nice2") == 0);
   assert(client.rmdir("/nice") == 0);
 
-  mds.stop();
-  storage.stop();
+  mds_thread.detach();
+  storage_thread.detach();
 
   std::cout << "test_integration passed" << std::endl;
 }
@@ -234,7 +235,7 @@ int main() {
   test.test_rocksdb();
 
   test.test_integration();
-  test.test_mkdir();
+  //test.test_mkdir();
 
   std::cout << "All Tests Passed." << std::endl;
 

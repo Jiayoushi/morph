@@ -7,12 +7,12 @@ find_package(Threads REQUIRED)
 include_directories(/usr/local/include)
 include_directories(.)
 
-
 file(GLOB SOURCES 
   "mds/*.cc"
   "client/*.cc"
   "tests/*.cc"
-  "storage/*.cc")
+  "storage/*.cc"
+  "common/*.cc")
 
 add_executable(test
   ${SOURCES})

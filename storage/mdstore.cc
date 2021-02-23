@@ -29,20 +29,8 @@ MdStore::~MdStore() {
   delete db;
 }
 
-int MdStore::persist_metadata(const Handle &handle) {
+int MdStore::persist_metadata(const LogHandle &handle) {
   WriteBatch batch;
-
-  for (const Log &log: handle.logs) {
-    if (handle.logs.size() > 1) {
-      write_log(log, &batch);
-    } else {
-      write_log(log, nullptr);
-    }
-  } 
-
-  if (handle.logs.size() > 1) {
-    db->Write(WriteOptions(), &batch);
-  }
 
   return 0;
 }

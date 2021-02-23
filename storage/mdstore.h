@@ -15,7 +15,7 @@ class MdStore {
   MdStore();
   ~MdStore();
 
-  int persist_metadata(const Handle &handle);
+  int persist_metadata(const LogHandle &handle);
 
  private:
   std::string form_key(ino_t ino, type_t type);

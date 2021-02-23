@@ -8,7 +8,6 @@
 
 namespace morph {
 
-
 class RpcClient: NoCopy {
  public:
   RpcClient(std::string const &addr, uint16_t port):

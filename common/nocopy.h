@@ -6,7 +6,7 @@ namespace morph {
 class NoCopy {
  public:
   NoCopy(const NoCopy &) = delete;
-  void operator = (const NoCopy &) = delete;
+  void operator=(const NoCopy &) = delete;
  protected:
   NoCopy() = default;
   ~NoCopy() = default;

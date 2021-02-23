@@ -66,9 +66,17 @@ MetadataServer::MetadataServer(const unsigned short mds_port, const std::string 
       return res;
     }
   );
+
+  rpc_server.bind("stop_server",
+    [this]() {
+      logger->debug("stop_server called!");
+      rpc::this_server().stop();
+      logger->debug("stop_server returned!");
+  });
 } 
 
 MetadataServer::~MetadataServer() {
+  logger->debug("Server destructor called.");
 }
 
 void MetadataServer::run() {

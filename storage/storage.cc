@@ -30,13 +30,12 @@ void StorageServer::run() {
 }
 
 void StorageServer::stop() {
-   logger->info("StorageServer: starts stopped.");
+   logger->info("StorageServer: stop called.");
+   rpc_server.stop();
 }
 
 MetadataChangeReply StorageServer::metadata_change(MetadataChangeArgs args) {
   MetadataChangeReply reply;
-
-  mdstore.persist_metadata(args.handle);
 
   return reply;
 }

@@ -26,6 +26,7 @@ int NameNode::mkdir(cid_t cid, const char *pathname, mode_t mode) {
   std::shared_ptr<InodeDirectory> new_dir;
   std::vector<std::string> components;
 
+
   components = get_pathname_components(pathname);
   parent = lookup_parent(components);
 
@@ -40,12 +41,10 @@ int NameNode::mkdir(cid_t cid, const char *pathname, mode_t mode) {
   new_dir = allocate_inode<InodeDirectory>(INODE_TYPE::DIRECTORY, mode, cid);
   parent->add_dentry(components.back().c_str(), new_dir->ino);
 
-  // Log meta changes of the new directory and the parent's metadata
-  // note that parent's children are metadata in morph, not stored as data
-  std::vector<Log> logs;
-  logs.emplace_back(CREATE_INODE, new_dir->ino, new_dir->type, std::move(serialize<InodeDirectory>(*new_dir)));
-  logs.emplace_back(UPDATE_INODE, parent->ino, parent->type, std::move(serialize<InodeDirectory>(*parent)));
-  mdlog.log(std::move(logs));
+  LogHandle *handle = mdlog.journal_start();
+  handle->write_data<InodeDirectory>(CREATE_INODE, form_log_key(new_dir->ino, new_dir->type), *new_dir);
+  handle->write_data<InodeDirectory>(UPDATE_INODE, form_log_key(parent->ino, parent->type), *parent);
+  mdlog.journal_end(handle);
 
   return 0;
 }
@@ -198,6 +197,10 @@ std::vector<std::string> NameNode::get_pathname_components(const std::string &pa
 
 void NameNode::remove_inode(ino_t ino) {
   inode_map.erase(ino);
+}
+
+std::string NameNode::form_log_key(ino_t ino, type_t type) {
+  return std::to_string(ino) + "-" + std::to_string(type);
 }
 
 }

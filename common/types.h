@@ -13,6 +13,7 @@ typedef uint32_t op_t;
 typedef uint64_t hid_t;        // Handle id
 typedef uint64_t rid_t;        // Request's id
 
+typedef std::string LogBuffer;
 
 // TODO: gotta move this somewhere else
 struct stat {

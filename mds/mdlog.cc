@@ -7,14 +7,12 @@ MetadataLog::MetadataLog(const std::string &storage_ip, const unsigned short sto
 
 }
 
-void MetadataLog::log(std::vector<Log> &&logs) {
-  MetadataChangeArgs args;
-  MetadataChangeReply reply;
-
-  args.handle.logs = std::move(logs);
-
-  reply = rpc_client.call("metadata_change", args).as<MetadataChangeReply>();
+LogHandle * MetadataLog::journal_start() {
+  return journal.journal_start();
 }
 
+void MetadataLog::journal_end(LogHandle *log_handle) {
+  return journal.journal_end(log_handle);
+}
 
 }
