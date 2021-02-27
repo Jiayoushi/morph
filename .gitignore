@@ -32,5 +32,4 @@
 *.app
 
 build
-persist
-logs
+proto_out

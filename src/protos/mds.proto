@@ -1,0 +1,85 @@
+syntax = "proto3";
+
+package mds_rpc;
+
+service MdsService {
+  rpc mkdir (MkdirRequest) returns (MkdirReply) {};
+  rpc opendir (OpendirRequest) returns (OpendirReply) {};
+  rpc rmdir(RmdirRequest) returns (RmdirReply) {};
+  rpc stat (StatRequest) returns (StatReply) {};
+  rpc readdir (ReaddirRequest) returns (ReaddirReply) {};
+}
+
+
+
+message Stat {
+  uint64 st_ino = 1;
+  uint32 st_mode = 2;
+  uint32 st_uid = 3;
+}
+
+message DIR {
+  uint32 pos = 1;
+  bytes pathname = 2;
+}
+
+message dirent {
+  uint64 d_ino = 1;
+  uint32 d_type = 2;
+  bytes d_name = 3;
+}
+
+
+
+message MkdirRequest {
+  uint64 cid = 1;
+  uint64 rid = 2;
+  uint32 mode = 3;
+  bytes pathname = 4;
+}
+
+message MkdirReply {
+  int32 ret_val = 1;
+}
+
+message OpendirRequest {
+  uint64 cid = 1;
+  uint64 rid = 2;
+  bytes pathname = 3;
+}
+
+message OpendirReply {
+  int32 ret_val = 1;
+}
+
+message RmdirRequest {
+  uint64 cid = 1;
+  uint64 rid = 2;
+  bytes pathname = 3;
+}
+
+message RmdirReply {
+  int32 ret_val = 1;
+}
+
+message StatRequest {
+  uint64 cid = 1;
+  uint64 rid = 2;
+  bytes pathname = 3;
+}
+
+message StatReply {
+  int32 ret_val = 1;
+  Stat stat = 2;
+}
+
+message ReaddirRequest {
+  uint64 cid = 1;
+  uint64 rid = 2;
+  DIR dir = 3;
+}
+
+message ReaddirReply {
+  int32 ret_val = 1;
+  dirent dirent = 2;
+}

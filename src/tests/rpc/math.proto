@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package mathtest;
+
+service MathTest {
+  rpc multiply (MultiplyRequest) returns (MultiplyReply) {}
+  rpc test (TestRequest) returns (TestReply) {}
+}
+
+message MultiplyRequest {
+  int32 a = 1;
+  int32 b = 2;
+}
+
+message MultiplyReply {
+  int32 result = 1;
+}
+
+message Stat {
+  uint32 a = 1;
+  uint32 b = 2;
+}
+
+message TestRequest {
+  bytes pathname = 1;
+  Stat stat = 2;
+}
+
+message TestReply {
+  int32 result = 1;
+}
