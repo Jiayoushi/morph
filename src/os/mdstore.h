@@ -4,21 +4,15 @@
 #include <string>
 #include <rocksdb/db.h>
 
-using namespace ROCKSDB_NAMESPACE;
-
 namespace morph {
+
+using rocksdb::DB;
 
 class MdStore {
  public:
   MdStore();
   ~MdStore();
-
-  int persist_metadata(const LogHandle &handle);
-
  private:
-  std::string form_key(ino_t ino, type_t type);
-  void write_log(const Log &log, WriteBatch *batch);
-
   DB *db;
 };
 

@@ -11,7 +11,8 @@ typedef uint64_t cid_t;        // Client's id
 typedef uint8_t  type_t;
 typedef uint32_t op_t;
 typedef uint64_t hid_t;        // Handle id
-typedef uint64_t rid_t;        // Request's id
+typedef uint64_t rid_t;        // Request id
+typedef uint32_t bno_t;        // Block number
 
 typedef std::string LogBuffer;
 

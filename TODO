@@ -1,1 +1,2 @@
 1. change config.h to some config.xml or config.json... so that you don't need to re-compile the whole project when you change this single file.
+2. object storage

@@ -5,7 +5,7 @@
 #include <thread>
 #include <chrono>
 #include <atomic>
-#include <storage/storage.h>
+#include <os/oss.h>
 #include <grpcpp/grpcpp.h>
 #include <rocksdb/db.h>
 #include <rocksdb/slice.h>
@@ -167,10 +167,17 @@ void Test::test_msgpack() {
 }
 
 void Test::test_rocksdb() {
+  using rocksdb::DB;
+  using rocksdb::Options;
+  using rocksdb::Status;
+  using rocksdb::WriteBatch;
+  using rocksdb::WriteOptions;
+  using rocksdb::ReadOptions;
+
   const std::string kDBPath = "/tmp/rocksdb_simple_example";
-  ROCKSDB_NAMESPACE::DB *db;
-  ROCKSDB_NAMESPACE::Options options;
-  ROCKSDB_NAMESPACE::Status s;
+  DB *db;
+  Options options;
+  Status s;
   std::string value;
 
   options.IncreaseParallelism();

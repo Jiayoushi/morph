@@ -6,13 +6,13 @@
 #include <mutex>
 #include <condition_variable>
 #include <deque>
-//#include <common/nocopy.h>
+#include <common/nocopy.h>
 
 namespace morph {
 
 
 template <typename T>
-class ConcurrentQueue {//}: NoCopy {
+class ConcurrentQueue: NoCopy {
  public:
   ConcurrentQueue():
     head(new Node), tail(head.get())
@@ -47,6 +47,10 @@ class ConcurrentQueue {//}: NoCopy {
     return old_head->item;
   }
 
+  void wait_and_pop(T **item) {
+    std::unique_ptr<Node> const old_head = wait_pop_head(item);
+  }
+
   bool empty() {
     std::lock_guard<std::mutex> head_lock(head_mutex);
     return head.get() == get_tail();
@@ -79,6 +83,12 @@ class ConcurrentQueue {//}: NoCopy {
 
   std::unique_ptr<Node> wait_pop_head() {
     std::unique_lock<std::mutex> head_lock(wait_for_data());
+    return pop_head();
+  }
+
+  std::unique_ptr<Node> wait_pop_head(T **item) {
+    std::unique_lock<std::mutex> head_lock(wait_for_data());
+    *item = head->item.get();
     return pop_head();
   }
 

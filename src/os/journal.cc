@@ -1,4 +1,4 @@
-#include <storage/journal.h>
+#include <os/journal.h>
 
 #include <unistd.h>
 #include <fcntl.h>

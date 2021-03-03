@@ -13,13 +13,21 @@ find_package(Threads REQUIRED)
 find_package(gRPC REQUIRED)
 
 include(FetchContent)
+set(FETCHCONTENT_QUIET OFF)
+
 FetchContent_Declare(
   gRPC
   GIT_REPOSITORY https://github.com.cnpmjs.org/grpc/grpc
   GIT_TAG        v1.35.0
 )
-set(FETCHCONTENT_QUIET OFF)
+FetchContent_Declare(
+  googletest
+  GIT_REPOSITORY https://github.com.cnpmjs.org/google/googletest.git
+  GIT_TAG        release-1.8.0
+)
+
 FetchContent_MakeAvailable(gRPC)
+FetchContent_MakeAvailable(googletest)
 
 include_directories(/usr/local/include)
 include_directories(src)
@@ -29,7 +37,7 @@ file(GLOB SOURCES
   "src/mds/*.cc"
   "src/client/*.cc"
   "src/tests/*.cc"
-  "src/storage/journal.cc"
+  "src/os/journal.cc"
   "src/common/*.cc"
   "proto_out/*.cc")
 
@@ -39,7 +47,10 @@ add_executable(math_server
   src/tests/rpc/server.cc)
 add_executable(math_client
   src/tests/rpc/client.cc)
-
+add_executable(block_store_test
+  src/os/block_store.cc
+  src/os/buffer.cc
+  src/tests/os/block_store.cc)
 
 add_library(math_grpc_proto
   "proto_out/math.pb.cc"
@@ -85,3 +96,5 @@ target_link_libraries(test
   /usr/lib/x86_64-linux-gnu/liblz4.so.1
   /usr/lib/x86_64-linux-gnu/libdl.so
   /usr/lib/x86_64-linux-gnu/libz.so)
+target_link_libraries(block_store_test
+  gtest)

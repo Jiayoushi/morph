@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package oss_rpc;
+
+service ObjectStorageService {
+  rpc PutObject (PutObjectRequest) returns (PutObjectReply) {};
+  rpc AppendObject (AppendObjectRequest) returns (AppendObjectReply) {};
+  rpc GetObject (GetObjectRequst) returns (GetObjectRequst) {};
+  rpc DeleteObject (DeleteObjectRequest) returns (DeleteObjectRequest) {};
+
+  rpc PutMetadata (PutMetadataRequest) returns (PutMetadataReply) {};
+  rpc GetMetadata (GetMetadataRequest) returns (GetMetadataReply) {};
+  rpc DeleteMetadata (DeleteMetadataRequest) returns (DeleteMetadataReply) {};
+}
+
+message PutObjectRequest {
+  string object_name = 1;
+  bytes body = 2;
+}
+
+message PutObjectReply {
+  int32 ret_val = 1;
+}
+
+message GetObjectRequest {
+  string object_name = 1;
+  uint32 offset;
+  uint32 size;
+}
+
+message GetObjectReply {
+  int32 ret_val = 1;
+  bytes body = 2;
+}
