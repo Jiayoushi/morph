@@ -121,7 +121,6 @@ TEST(BlockStoreTest, random_read_write) {
       int chosen = rand() % items.size();
       b = bm->get_buffer(items[chosen].bno);
 
-      bm->sync();
       bm->read(b);
 
       ASSERT_EQ(items[chosen].value, std::string(b->data, 512));

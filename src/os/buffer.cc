@@ -29,9 +29,11 @@ void BufferManager::read(std::shared_ptr<Buffer> buffer) {
   assert(buffer != nullptr);
 
   // TODO: what do we do with dirty? what's the semantics requirement?
-  assert(buffer->flag[Buffer::DIRTY] == 0);
+  if (buffer->flag[Buffer::DIRTY]) {
+    return;
+  }
 
-  if (buffer->flag[Buffer::UPTODATE] == 1) {
+  if (buffer->flag[Buffer::UPTODATE]) {
     //fprintf(stderr, "%d is uptodate !\n", buffer->bno);
     return;
   }
