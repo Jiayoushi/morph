@@ -9,11 +9,10 @@
 
 namespace morph {
 
-BlockStore::BlockStore(const std::string &filename, uint32_t total_blocks):
-  free_blocks(total_blocks) {
+BlockStore::BlockStore(const std::string &filename, uint32_t total_blocks) {
   char *buffer;
 
-  fd = open(filename.c_str(), O_CREAT | O_RDWR | O_DIRECT | O_TRUNC);
+  fd = open(filename.c_str(), O_CREAT | O_RDWR | O_DIRECT | O_TRUNC | O_SYNC);
   if (fd < 0) {
     perror("failed to open file to store buffers");
     exit(EXIT_FAILURE);
@@ -27,20 +26,19 @@ BlockStore::~BlockStore() {
 }
 
 bno_t BlockStore::get_block() {
-  --free_blocks;
   return bitmap->get_free_block();
 }
 
 void BlockStore::put_block(bno_t bno) {
-  ++free_blocks;
   bitmap->put_block(bno);
 }
 
 void BlockStore::write_to_disk(bno_t bno, const char *data) {
-  ssize_t written;
+  ssize_t written = 0;
 
-  //std::cout << "ACTUAL WRITE " << bno << std::endl;
-  //std::cout << std::string(data, 512) << "\n\n";
+  // TODO: I don't know if this lock is necessary or not... need to figure it out later
+  std::lock_guard<std::mutex> lock(rw);
+  //fprintf(stderr, "ACTUAL WRITE bno(%d)  addr(%p) data(%s)\n\n", bno, data, std::string(data, 512).c_str());
 
   while (written != 512) {
     written = pwrite(fd, data, 512, bno * 512);
@@ -55,9 +53,9 @@ void BlockStore::write_to_disk(bno_t bno, const char *data) {
 }
 
 void BlockStore::read_from_disk(bno_t bno, char *data) {
-  ssize_t read;
+  ssize_t read = 0;
 
-  //std::cout << "READ " << bno << std::endl;
+  std::lock_guard<std::mutex> lock(rw);
 
   while (read != 512) {
     read = pread(fd, data, 512, bno * 512);

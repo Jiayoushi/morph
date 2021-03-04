@@ -19,6 +19,29 @@ struct Item {
   {}
 };
 
+TEST(BlockStoreTest, concurrent_allocate_free_bitmap) {
+  const int actors_count = 20;
+  const int action_count = 100;
+  const int TOTAL_BLOCKS = 16;
+  std::shared_ptr<BlockStore> bs = std::make_shared<BlockStore>("/media/jyshi/mydisk/blocks", TOTAL_BLOCKS);
+
+  std::vector<std::thread> actors;
+  for (int i = 0; i < actors_count; ++i) {
+    actors.push_back(std::thread([&bs]() {
+      bno_t bno;
+      for (int i = 0; i < action_count; ++i) {
+        bno = bs->get_block();
+        std::this_thread::sleep_for(std::chrono::milliseconds(rand() % 5));
+        bs->put_block(bno);
+      }
+    }));
+  }
+
+  for (auto &p: actors) {
+    p.join();
+  }
+}
+
 TEST(BlockStoreTest, basic_allocate_free) {
   std::shared_ptr<Buffer> b;
   const int TOTAL_BLOCKS = 16;
@@ -43,6 +66,37 @@ TEST(BlockStoreTest, basic_allocate_free) {
   }
 }
 
+TEST(BlockStoreTest, concurrent_allocate_free_buffer) {
+  const int actors_count = 16;
+  const int action_count = 100;
+  const int TOTAL_BLOCKS = 16;
+  const int TOTAL_BUFFERS = 16;
+  std::shared_ptr<BlockStore> bs = std::make_shared<BlockStore>("/media/jyshi/mydisk/blocks", TOTAL_BLOCKS);
+  std::unique_ptr<BufferManager> bm = std::make_unique<BufferManager>(TOTAL_BUFFERS, bs);
+
+  std::vector<std::thread> actors;
+  for (int i = 0; i < actors_count; ++i) {
+    actors.push_back(std::thread([&bs, &bm]() {
+      bno_t bno;
+      std::shared_ptr<Buffer> buf;
+
+      for (int i = 0; i < action_count; ++i) {
+        bno = bs->get_block();
+        buf = bm->get_buffer(bno);
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(rand() % 5));
+
+        bm->put_buffer(buf);
+        bs->put_block(bno);
+      }
+    }));
+  }
+
+  for (auto &p: actors) {
+    p.join();
+  }
+}
+
 TEST(BlockStoreTest, basic_read_write) {
   std::shared_ptr<Buffer> b;
   bno_t bno;
@@ -64,6 +118,8 @@ TEST(BlockStoreTest, basic_read_write) {
     bnos.push_back(bno);
     b = bm->get_buffer(bno);
 
+    //fprintf(stderr, "[TEST] write to bno(%d) with (%s)\n\n", bno, garbage[i % TOTAL_BLOCKS].c_str());
+
     bm->write(b, garbage[i % TOTAL_BLOCKS].c_str(), 512);
 
     bm->put_buffer(b);
@@ -73,9 +129,13 @@ TEST(BlockStoreTest, basic_read_write) {
     bno = bnos[i];
     b = bm->get_buffer(bno);
 
+    //fprintf(stderr, "[TEST] read %d\n", bno);
+
     bm->read(b);
 
-    ASSERT_STREQ(garbage[i].c_str(), b->data);
+    //fprintf(stderr, "[TEST] out of read %d\n", bno);
+
+    ASSERT_EQ(garbage[i], std::string(b->data, 512));
 
     bm->put_buffer(b);
   }
@@ -92,7 +152,7 @@ TEST(BlockStoreTest, random_read_write) {
   char buf[512];
   int local_buffer = 0;
 
-  for (int i = 0; i < 10000; ++i) {
+  for (int i = 0; i < 100; ++i) {
     bool do_write_new = rand() % 2;
 
     if (bm->free_buffer_count() == 0 || rand() % 2 == 0) {
@@ -123,6 +183,7 @@ TEST(BlockStoreTest, random_read_write) {
 
       bm->read(b);
 
+      //fprintf(stderr, "read %d\n", items[chosen].bno);
       ASSERT_EQ(items[chosen].value, std::string(b->data, 512));
 
       if (bs->free_block_count() == 0 || rand() % 2 == 0) {
@@ -135,6 +196,42 @@ TEST(BlockStoreTest, random_read_write) {
 
       bm->put_buffer(b);
     }
+  }
+}
+
+TEST(BlockStoreTest, concurrent_read_write) {
+  const int actors_count = 16;
+  const int action_count = 3;
+  const int TOTAL_BLOCKS = 16;
+  const int TOTAL_BUFFERS = 16;
+  std::shared_ptr<BlockStore> bs = std::make_shared<BlockStore>("/media/jyshi/mydisk/blocks", TOTAL_BLOCKS);
+  std::unique_ptr<BufferManager> bm = std::make_unique<BufferManager>(TOTAL_BUFFERS, bs);
+
+  std::vector<std::thread> actors;
+  for (int i = 0; i < actors_count; ++i) {
+    actors.push_back(std::thread([&bs, &bm]() {
+      bno_t bno;
+      std::shared_ptr<Buffer> buf;
+      char garbage[512];
+
+      for (int i = 0; i < action_count; ++i) {
+        bno = bs->get_block();
+
+        buf = bm->get_buffer(bno);
+        get_garbage(garbage, 512);
+        bm->write(buf, garbage, 512);
+        bm->put_buffer(buf);
+
+        buf = bm->get_buffer(bno);
+        bm->read(buf);
+        ASSERT_EQ(std::string(garbage, 512), std::string(buf->data, 512));
+        bs->put_block(bno);
+      }
+    }));
+  }
+
+  for (auto &p: actors) {
+    p.join();
   }
 }
 
