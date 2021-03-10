@@ -2,10 +2,9 @@ syntax = "proto3";
 
 package oss_rpc;
 
-service ObjectStorageService {
+service ObjectStoreService {
   rpc PutObject (PutObjectRequest) returns (PutObjectReply) {};
-  rpc AppendObject (AppendObjectRequest) returns (AppendObjectReply) {};
-  rpc GetObject (GetObjectRequst) returns (GetObjectRequst) {};
+  rpc GetObject (GetObjectRequest) returns (GetObjectRequest) {};
   rpc DeleteObject (DeleteObjectRequest) returns (DeleteObjectRequest) {};
 
   rpc PutMetadata (PutMetadataRequest) returns (PutMetadataReply) {};
@@ -15,7 +14,8 @@ service ObjectStorageService {
 
 message PutObjectRequest {
   string object_name = 1;
-  bytes body = 2;
+  uint32 offset = 2;
+  bytes body = 3;
 }
 
 message PutObjectReply {
@@ -24,11 +24,47 @@ message PutObjectReply {
 
 message GetObjectRequest {
   string object_name = 1;
-  uint32 offset;
-  uint32 size;
+  uint32 offset = 2;
+  uint32 size = 3;
 }
 
 message GetObjectReply {
   int32 ret_val = 1;
   bytes body = 2;
+}
+
+message DeleteObjectRequest {
+  string object_name = 1;
+}
+
+message DeleteObjectReply {
+  int32 ret_val = 1;
+}
+
+message PutMetadataRequest {
+  string object_name = 1;
+  string attribute = 2;
+  string value = 3;
+}
+
+message PutMetadataReply {
+  int32 ret_val = 1;
+}
+
+message GetMetadataRequest {
+  string object_name = 1;
+  string attribute = 2;
+}
+
+message GetMetadataReply {
+  int32 ret_val = 1;
+  string value = 2;
+}
+
+message DeleteMetadataRequest {
+  string object_name = 1;
+}
+
+message DeleteMetadataReply {
+  int32 ret_val = 1;
 }

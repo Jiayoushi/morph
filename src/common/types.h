@@ -12,7 +12,8 @@ typedef uint8_t  type_t;
 typedef uint32_t op_t;
 typedef uint64_t hid_t;        // Handle id
 typedef uint64_t rid_t;        // Request id
-typedef uint32_t bno_t;        // Block number
+typedef uint32_t sector_t;     // Physical Block number
+typedef uint32_t lbn_t;        // Logical Block Number
 
 typedef std::string LogBuffer;
 

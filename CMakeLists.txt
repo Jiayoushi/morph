@@ -51,6 +51,11 @@ add_executable(block_store_test
   src/os/block_store.cc
   src/os/buffer.cc
   src/tests/os/block_store.cc)
+add_executable(object_store_test
+  src/os/block_store.cc
+  src/os/buffer.cc
+  src/os/object_store.cc
+  src/tests/os/object_store.cc)
 
 add_library(math_grpc_proto
   "proto_out/math.pb.cc"
@@ -97,4 +102,6 @@ target_link_libraries(test
   /usr/lib/x86_64-linux-gnu/libdl.so
   /usr/lib/x86_64-linux-gnu/libz.so)
 target_link_libraries(block_store_test
+  gtest)
+target_link_libraries(object_store_test
   gtest)

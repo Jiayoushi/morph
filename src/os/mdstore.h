@@ -12,6 +12,7 @@ class MdStore {
  public:
   MdStore();
   ~MdStore();
+
  private:
   DB *db;
 };

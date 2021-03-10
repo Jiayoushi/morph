@@ -25,48 +25,51 @@ BlockStore::~BlockStore() {
   close(fd);
 }
 
-bno_t BlockStore::get_block() {
-  return bitmap->get_free_block();
+sector_t BlockStore::allocate_blocks(uint32_t count) {
+  return bitmap->allocate_blocks(count);
 }
 
-void BlockStore::put_block(bno_t bno) {
-  bitmap->put_block(bno);
+void BlockStore::free_blocks(sector_t start_block, uint32_t count) {
+  bitmap->free_blocks(start_block, count);
 }
 
-void BlockStore::write_to_disk(bno_t bno, const char *data) {
+void BlockStore::write_to_disk(sector_t pbn, const char *data) {
   ssize_t written = 0;
 
   // TODO: I don't know if this lock is necessary or not... need to figure it out later
   std::lock_guard<std::mutex> lock(rw);
-  //fprintf(stderr, "ACTUAL WRITE bno(%d)  addr(%p) data(%s)\n\n", bno, data, std::string(data, 512).c_str());
 
-  while (written != 512) {
-    written = pwrite(fd, data, 512, bno * 512);
+  while (written != BLOCK_SIZE) {
+    written = pwrite(fd, data, BLOCK_SIZE, pbn * BLOCK_SIZE);
     if (written < 0) {
       perror("Failed to write");
       exit(EXIT_FAILURE);
-    } else if (written != 512) {
+    } else if (written != BLOCK_SIZE) {
       std::cerr << "Partial write: " << written << std::endl;
       exit(EXIT_FAILURE);
     }
   }
+
+  //fprintf(stderr, "[DISK] write pbn(%d) data(%s)\n", pbn, std::string(data, BLOCK_SIZE).c_str());
 }
 
-void BlockStore::read_from_disk(bno_t bno, char *data) {
+void BlockStore::read_from_disk(sector_t pbn, char *data) {
   ssize_t read = 0;
 
   std::lock_guard<std::mutex> lock(rw);
 
-  while (read != 512) {
-    read = pread(fd, data, 512, bno * 512);
+  while (read != BLOCK_SIZE) {
+    read = pread(fd, data, BLOCK_SIZE, pbn * BLOCK_SIZE);
     if (read < 0) {
       perror("Failed to read");
       exit(EXIT_FAILURE);
-    } else if (read != 512) {
-      std::cerr << "Partial read: " << bno << " " << read << std::endl;
+    } else if (read != BLOCK_SIZE) {
+      std::cerr << "Partial read: " << pbn << " " << read << std::endl;
       exit(EXIT_FAILURE);
     }
   }
+
+  //fprintf(stderr, "[DISK] read pbn(%d) data(%s)\n", pbn, std::string(data, BLOCK_SIZE).c_str());
 }
 
 }

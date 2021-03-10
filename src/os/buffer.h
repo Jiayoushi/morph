@@ -14,16 +14,16 @@
 
 namespace morph {
 
+
 class Buffer: NoCopy {
  public:
   Buffer() {
-    data = (char *)aligned_alloc(512, 512);
+    data = (char *)aligned_alloc(BLOCK_SIZE, BLOCK_SIZE);
     if (data == nullptr) {
       perror("failed to allocate aligned buffer");
       exit(EXIT_FAILURE);
     }
     reset();
-    bno = 99999999;
   }
 
   ~Buffer() {
@@ -31,14 +31,14 @@ class Buffer: NoCopy {
   }
 
   void reset() {
-    bno = 0;
+    pbn = 0;
     ref = 0;
     flag.reset();
   }
 
-  void init(bno_t b) {
+  void init(sector_t b) {
     reset();
-    bno = b;
+    pbn = b;
     flag[VALID] = 1;
   }
 
@@ -53,26 +53,38 @@ class Buffer: NoCopy {
   std::condition_variable write_complete;
   std::condition_variable read_complete;
   std::bitset<64> flag;
-  bno_t bno;                       // Buffer number
+  sector_t pbn;                              // Physical block number
   uint32_t ref;
   char *data;
 };
+
+
+struct BufferGroup: NoCopy {
+  std::list<std::shared_ptr<Buffer>> buffers;
+};
+
 
 class BufferManager {
  public:
   BufferManager(uint32_t total_buffer, std::shared_ptr<BlockStore> block_store);
   ~BufferManager();
 
-  std::shared_ptr<Buffer> get_buffer(bno_t b);
+  std::shared_ptr<BufferGroup> get_blocks(sector_t b, sector_t count);
 
-  void put_buffer(std::shared_ptr<Buffer> buffer);
+  std::shared_ptr<Buffer> get_block(sector_t b);
 
+  void put_blocks(std::shared_ptr<BufferGroup> group);
+
+  void put_block(std::shared_ptr<Buffer> buffer);
+  
   uint32_t free_buffer_count() const {
     return free_list.size();
   }
 
-  void write(std::shared_ptr<Buffer> buffer, const void *buf, size_t size);
+  void write(std::shared_ptr<Buffer> buffer, const char *buf, size_t size);
+
   void read(std::shared_ptr<Buffer> buffer);
+
   void io();
 
  private:
@@ -80,8 +92,8 @@ class BufferManager {
 
   void sync_read_from_disk(std::shared_ptr<Buffer> buffer);
 
-  std::shared_ptr<Buffer> lookup_index(bno_t bno) {
-    auto p = index.find(bno);
+  std::shared_ptr<Buffer> lookup_index(sector_t pbn) {
+    auto p = index.find(pbn);
     if (p == index.end()) {
       return nullptr;
     }
@@ -101,7 +113,7 @@ class BufferManager {
 
   void free_list_push(std::shared_ptr<Buffer> buffer) {
     for (auto p = free_list.begin(); p != free_list.end(); ++p) {
-      if (p->get()->flag[Buffer::VALID] && p->get()->bno == buffer->bno) {
+      if (p->get()->flag[Buffer::VALID] && p->get()->pbn == buffer->pbn) {
         assert(0);
       }
     }
@@ -109,9 +121,9 @@ class BufferManager {
     assert(free_list.size() <= TOTAL_BUFFERS);
   }
 
-  void free_list_remove(bno_t bno) {
-    free_list.remove_if([bno](std::shared_ptr<Buffer> buf) {
-      return buf->flag[Buffer::VALID] && buf->bno == bno;
+  void free_list_remove(sector_t pbn) {
+    free_list.remove_if([pbn](std::shared_ptr<Buffer> buf) {
+      return buf->flag[Buffer::VALID] && buf->pbn == pbn;
       });
   }
 
@@ -125,7 +137,7 @@ class BufferManager {
   std::mutex global_mutex;
 
   // TODO: need a better data structure
-  std::unordered_map<bno_t, std::shared_ptr<Buffer>> index;
+  std::unordered_map<sector_t, std::shared_ptr<Buffer>> index;
 
   // TODO: need a better one
   // the head is the newly added, recently used buffers, the tail is the least recently used buffers
