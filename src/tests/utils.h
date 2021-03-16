@@ -9,12 +9,13 @@
 
 namespace morph {
 
-void get_garbage(char *buf, size_t size) {
+char *get_garbage(char *buf, size_t size) {
   char c;
   for (int i = 0; i < size; ++i) {
     c = 97 + (rand() % 26);
     *buf++ = c;
   }
+  return buf;
 }
 
 }

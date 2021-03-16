@@ -13,18 +13,18 @@ using grpc::ServerContext;
 
 class ObjectStoreService final: oss_rpc::ObjectStoreService::Service {
  public:
-  grpc::Status PutObject(ServerContext *, const PutObjectRequest *, PutObjectReply *) override;
+  grpc::Status put_object(ServerContext *, const PutObjectRequest *, PutObjectReply *) override;
 
-  grpc::Status GetObject(ServerContext *, const GetObjectRequest *, GetObjectRequest *) override;
+  grpc::Status get_object(ServerContext *, const GetObjectRequest *, GetObjectReply *) override;
 
-  grpc::Status DeleteObject(ServerContext *, const DeleteObjectRequest *, DeleteObjectRequest *) override;
+  grpc::Status delete_object(ServerContext *, const DeleteObjectRequest *, DeleteObjectReply *) override;
 
 
-  grpc::Status PutMetadata(ServerContext *, const PutMetadataRequest *, PutMetadataReply *) override;
+  grpc::Status put_metadata(ServerContext *, const PutMetadataRequest *, PutMetadataReply *) override;
 
-  grpc::Status GetMetadata(ServerContext *, const GetMetadataRequest *, GetMetadataReply *) override;
+  grpc::Status get_metadata(ServerContext *, const GetMetadataRequest *, GetMetadataReply *) override;
 
-  grpc::Status DeleteMetadata(ServerContext *, const DeleteMetadataRequest *, DeleteMetadataReply *) override;
+  grpc::Status delete_metadata(ServerContext *, const DeleteMetadataRequest *, DeleteMetadataReply *) override;
 
  private:
 

@@ -1,9 +1,3 @@
-// Use of this source code is governed by a BSD-style license
-// that can be found in the License file.
-//
-// Author: Shuo Chen (chenshuo at chenshuo dot com)
-// Modified: Jiayou Shi
-
 #ifndef MORPH_COMMON_BLOCKINGQUEUE_H
 #define MORPH_COMMON_BLOCKINGQUEUE_H
 
@@ -36,13 +30,23 @@ class BlockingQueue: NoCopy {
 
   T pop() {
     std::unique_lock<std::mutex> lock(mutex);
-    while (queue.empty()) {
-      cv.wait(lock);
-    }
+    cv.wait(lock, [this]() {
+      return !queue.empty();
+    });
     assert(!queue.empty());
     T front(std::move(queue.front()));
     queue.pop_front();
     return front;
+  }
+
+  bool try_pop(T &item) {
+    std::unique_lock<std::mutex> lock(mutex);
+    if (queue.empty()) {
+      return false;
+    }
+    item = std::move(queue.front());
+    queue.pop_front();
+    return true;
   }
 
   size_t size() const {

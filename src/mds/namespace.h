@@ -8,7 +8,7 @@
 #include <atomic>
 #include <common/types.h>
 #include <common/nocopy.h>
-#include <common/config.h>
+#include <common/options.h>
 #include <os/journal.h>
 #include <grpcpp/grpcpp.h>
 #include <spdlog/sinks/basic_file_sink.h>

@@ -4,6 +4,7 @@
 #include <array>
 #include <memory>
 #include <cstdint>
+#include <cassert>
 #include <unordered_map>
 #include <os/buffer.h>
 #include <os/block_store.h>
@@ -11,85 +12,137 @@
 
 namespace morph {
 
+// TODO:...
+const uint8_t OBJECT_NOT_EXISTS = 1;
+const uint8_t NO_CONTENT = 2;          // 1. read parts that the object has not yet written
+const uint8_t OBJECT_NAME_INVALID = 3;
+
+const uint32_t INVALID_EXTENT = std::numeric_limits<uint32_t>::max();
 
 struct Extent {
   lbn_t start_lbn;       // The first logical block number
-  lbn_t end_lbn;        // The last logical block number (included)
-  sector_t start_pbn;    // The mapped first physical block number
+  lbn_t end_lbn;         // The last logical block number (included)
+  pbn_t start_pbn;       // The mapped first physical block number
 
-  Extent() 
+  Extent():
+    start_lbn(INVALID_EXTENT)
   {}
 
-  Extent(lbn_t lstart, lbn_t lend, sector_t pstart):
+  Extent(lbn_t lstart, lbn_t lend, pbn_t pstart):
     start_lbn(lstart),
     end_lbn(lend),
     start_pbn(pstart) {
-
+    assert(lstart != INVALID_EXTENT);
   }
 
-  bool operator==(const Extent &rhs) {
+  bool valid() {
+    return start_lbn != INVALID_EXTENT;
+  }
+
+  bool operator==(const Extent &rhs) const {
     return memcmp(this, &rhs, sizeof(Extent)) == 0;
   }
+
 };
 
+//enum OBJECT_FLAG {
+//  B_DIRTY = 0,
+//};
 
 class Object {
  public:
   typedef std::map<lbn_t, Extent>::iterator EXTENT_TREE_ITER;
 
-  Object()
+  Object():
+    size(0)
   {}
 
-  //    [        ]
-  //  [  ] [ ] [   ]
-  std::vector<Extent> search_extent(lbn_t target_lbn_start, lbn_t target_lbn_end) {
+
+  // On sucess, it returns true. ext is set to the extent that contains the lbn
+  // On failure, it returns false.
+  //   If there is a extent whose start_lbn is greater than lbn, then ext is set to that extent.
+  //   If not, then ext is going to be set as a INVALID_EXTENT.
+  bool search_extent(lbn_t lbn, Extent &ext) {
     std::vector<Extent> res;
     EXTENT_TREE_ITER iter;
     lbn_t start;
     lbn_t end;
     
-    for (iter = extent_tree.lower_bound(target_lbn_start);
-         iter != extent_tree.end();
-         ++iter) {
-      start = iter->second.start_lbn;
-      end = iter->second.end_lbn;
+    iter = extent_tree.lower_bound(lbn);
 
-      if (end < target_lbn_start || start > target_lbn_end) {
-        break;
-      }
-
-      res.push_back(iter->second);
+    if (iter == extent_tree.end()) {
+      ext.start_lbn = INVALID_EXTENT;
+      return false;
     }
 
-    return res;
+    ext = iter->second;
+    return lbn >= iter->second.start_lbn && lbn <= iter->second.end_lbn;
   }
 
-  void insert_extent(lbn_t start_lbn, lbn_t end_lbn, sector_t start_pbn) {
-    assert(search_extent(start_lbn, end_lbn).empty());
-
+  void insert_extent(lbn_t start_lbn, lbn_t end_lbn, pbn_t start_pbn) {
     extent_tree.emplace(end_lbn, Extent(start_lbn, end_lbn, start_pbn));
   }
 
  private:
+  friend class ObjectStore;
+
+  std::mutex mutex;
+
+  std::list<std::shared_ptr<Buffer>> dirty_buffers;
+
+  //std::bitset<64> flag;
+
+  uint32_t size;
+
   // The metadata is entirely in memory, so we don't use direct extents here. Just a red black tree.
-  // The tree is sorted by the last logical number covered by the extent
+  // The tree is sorted by the the last logical block number covered by the extent
   std::map<lbn_t, Extent> extent_tree;
 };
 
+
 class ObjectStore {
  public:
-  void PutObject(const std::string &object_name, const uint32_t offset, const std::string &body);
+  ObjectStore() = delete;
+
+  ObjectStore(ObjectStoreOptions oso = ObjectStoreOptions());
+
+  ~ObjectStore();
+
+  int put_object(const std::string &object_name, const uint32_t offset, const std::string &body);
+
+  int get_object(const std::string &object_name, std::string &buf, const uint32_t offset, const uint32_t size);
+
+  const ObjectStoreOptions opts;
 
  private:
-  void object_write_data(std::shared_ptr<Object> object, const uint32_t offset, const std::string &data);
+  std::shared_ptr<Object> search_object(const std::string &name, bool create);
+
+  void object_write(std::shared_ptr<Object> object, const uint32_t offset, const std::string &data);
+
+  std::shared_ptr<Buffer> get_block(std::shared_ptr<Object> object, lbn_t lbn, lbn_t lbn_end, bool create);
+
+  void write_buffer(std::shared_ptr<Object> object, std::shared_ptr<Buffer> buffer, 
+                    const char *data_ptr, uint32_t buf_offset, uint32_t size);
+
+  void read_buffer(std::shared_ptr<Object> object, std::shared_ptr<Buffer> buffer);
+
+  void flush();
+
+  std::atomic<bool> running;
+
+  std::unique_ptr<std::thread> flush_thread;
 
   BlockStore block_store;
 
   BufferManager buffer_manager;
 
-  MdStore md_store;
+  //MdStore md_store;
 
-  std::unordered_map<std::string, std::shared_ptr<Object>> objects;
+  BlockingQueue<std::shared_ptr<Object>> dirty_objects;
+
+  std::mutex index_mutex;
+
+  std::unordered_map<std::string, std::shared_ptr<Object>> index;
 };
 
 }

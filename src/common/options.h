@@ -1,5 +1,5 @@
-#ifndef MORPH_COMMON_CONFIG_H
-#define MORPH_COMMON_CONFIG_H
+#ifndef MORPH_COMMON_OPTIONS_H
+#define MORPH_COMMON_OPTIONS_H
 
 #include <spdlog/common.h>
 
@@ -25,6 +25,28 @@ const uint16_t JOURNAL_BLOCK_SIZE                = 1024;
 const uint32_t JOURNAL_FILE_SIZE_THRESHOLD       = 4096;
 const uint8_t JOURNAL_TRANSACTION_CLOSE_INTERVAL = 1;
 const uint8_t JOURNAL_TRANSACTION_SYNC_INTERVAL  = 1;
+
+struct BlockStoreOptions {
+  uint32_t TOTAL_BLOCKS = 16;
+  uint16_t BLOCK_SIZE = 512;
+  std::string STORE_FILE = "/media/jyshi/mydisk/blocks";
+};
+
+struct BufferManagerOptions {
+  uint32_t TOTAL_BUFFERS = 16;
+  uint16_t BUFFER_SIZE = 512;
+  uint8_t ALLOCATE_RETRY = 3;
+};
+
+struct ObjectStoreOptions {
+  BlockStoreOptions bso;
+  BufferManagerOptions bmo;
+
+  ObjectStoreOptions():
+    bso(),
+    bmo()
+  {}
+};
 
 }
 

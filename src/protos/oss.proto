@@ -3,13 +3,13 @@ syntax = "proto3";
 package oss_rpc;
 
 service ObjectStoreService {
-  rpc PutObject (PutObjectRequest) returns (PutObjectReply) {};
-  rpc GetObject (GetObjectRequest) returns (GetObjectRequest) {};
-  rpc DeleteObject (DeleteObjectRequest) returns (DeleteObjectRequest) {};
+  rpc put_object (PutObjectRequest) returns (PutObjectReply) {};
+  rpc get_object (GetObjectRequest) returns (GetObjectReply) {};
+  rpc delete_object (DeleteObjectRequest) returns (DeleteObjectReply) {};
 
-  rpc PutMetadata (PutMetadataRequest) returns (PutMetadataReply) {};
-  rpc GetMetadata (GetMetadataRequest) returns (GetMetadataReply) {};
-  rpc DeleteMetadata (DeleteMetadataRequest) returns (DeleteMetadataReply) {};
+  rpc put_metadata (PutMetadataRequest) returns (PutMetadataReply) {};
+  rpc get_metadata (GetMetadataRequest) returns (GetMetadataReply) {};
+  rpc delete_metadata (DeleteMetadataRequest) returns (DeleteMetadataReply) {};
 }
 
 message PutObjectRequest {

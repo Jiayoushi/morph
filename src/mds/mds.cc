@@ -2,7 +2,7 @@
 
 #include <iostream>
 #include <rpc/this_server.h>
-#include <common/config.h>
+#include <common/options.h>
 #include <spdlog/fmt/bundled/printf.h>
 #include <grpcpp/grpcpp.h>
 

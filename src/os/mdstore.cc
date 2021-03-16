@@ -8,7 +8,7 @@
 #include <rocksdb/slice.h>
 #include <rocksdb/options.h>
 #include <common/utils.h>
-#include <common/config.h>
+#include <common/options.h>
 
 namespace morph {
 
