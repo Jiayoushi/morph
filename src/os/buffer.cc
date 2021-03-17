@@ -6,6 +6,15 @@
 
 namespace morph {
 
+void Buffer::copy_data(const char *data, uint32_t buf_offset, uint32_t data_offset, uint32_t size) {
+  std::lock_guard<std::mutex> lock(mutex);
+
+  //fprintf(stderr, "[buffer] copy pbn(%d) buf_offset(%d) data_offset(%d) data_size(%d)\n",
+  //    pbn, buf_offset, data_offset, size);
+
+  memcpy(buf + buf_offset, data + data_offset, size);
+}
+
 BufferManager::BufferManager(BufferManagerOptions o):
   opts(o) {
 
@@ -26,6 +35,8 @@ std::shared_ptr<Buffer> BufferManager::get_buffer(pbn_t pbn) {
     // TODO: condition variable...
     std::this_thread::sleep_for(std::chrono::microseconds(10));
   }
+
+  assert(buffer != nullptr);
 
   //fprintf(stderr, "[Buffer] get_buffer pbn(%d) buffer->pbn(%d) DIRTY(%d) UPTODATE(%d)\n", 
   //  pbn, buffer->pbn, flag_marked(buffer, B_DIRTY), flag_marked(buffer, B_UPTODATE));

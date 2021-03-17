@@ -19,7 +19,7 @@ BlockStore::BlockStore(BlockStoreOptions o):
     exit(EXIT_FAILURE);
   }
 
-  bitmap = std::make_unique<Bitmap>(opts.TOTAL_BLOCKS);
+  bitmap = std::make_unique<Bitmap>(opts.TOTAL_BLOCKS, opts.ALLOCATE_RETRY);
 
   io_thread = std::make_unique<std::thread>(&BlockStore::io, this);
 }

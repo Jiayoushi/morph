@@ -42,7 +42,7 @@ void object_read_write(ObjectStore &os, const std::string &name, uint32_t ACTION
 
     //fprintf(stderr, "[TEST] EXPECT EQ\n");
 
-    ASSERT_EQ(send_buf, get_buf);
+    ASSERT_EQ(get_buf, send_buf);
 
     //get_buf.clear();
     //fprintf(stderr, "[TEST] SUCCESS\n");
@@ -97,24 +97,38 @@ TEST(ObjectStoreTest, object_extent) {
   ASSERT_FALSE(ext.valid());
 }
 
+
 TEST(ObjectStoreTest, basic_read_write) {
-  ObjectStoreOptions opts;
-  ObjectStore os(opts);
+  {
+    ObjectStoreOptions opts;
+    ObjectStore os(0, opts);
 
-  object_read_write(os, "obj1", 300, 4096);
+    object_read_write(os, "obj1", 200, 4096);
+  }
 
-  object_read_write(os, "obj2", 300, 12378);
+  {
+    ObjectStoreOptions opts;
+    ObjectStore os(1, opts);
+
+    object_read_write(os, "obj2", 200, 5678);
+  }
+
+  {
+    ObjectStoreOptions opts;
+    ObjectStore os(2, opts);
+    object_read_write(os, "obj3", 200, 12378);
+  }
 }
-
 
 TEST(ObjectStoreTest, concurrent_read_write) {
   {
     ObjectStoreOptions opts;
-    opts.bmo.BUFFER_SIZE = 100;
-    ObjectStore os(opts);
+    opts.bmo.TOTAL_BUFFERS = 100;
+    opts.bso.TOTAL_BLOCKS = 128;
+    ObjectStore os(3, opts);
     std::vector<std::thread> threads;
     
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < 5; ++i) {
       std::string name = std::string("obj") + std::to_string(i);
       threads.push_back(std::thread(object_read_write, std::ref(os), name, 300, 5678));
     }

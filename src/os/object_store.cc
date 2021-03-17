@@ -2,14 +2,31 @@
 
 #include <cassert>
 #include <common/utils.h>
+#include <spdlog/fmt/bundled/printf.h>
 
 namespace morph {
 
-ObjectStore::ObjectStore(ObjectStoreOptions oso):
+ObjectStore::ObjectStore(uint32_t idp, ObjectStoreOptions oso):
   opts(oso),
   block_store(oso.bso),
   buffer_manager(oso.bmo),
+  id(idp),
+  w_count(0),
+  r_count(0),
   running(true) {
+
+  try {
+    std::string filepath = LOGGING_DIRECTORY + "/oss_" + std::to_string(idp);
+    logger = spdlog::basic_logger_mt("oss_" + std::to_string(idp), filepath, true);
+    logger->set_level(LOGGING_LEVEL);
+    logger->flush_on(FLUSH_LEVEL);
+  } catch (const spdlog::spdlog_ex &ex) {
+    std::cerr << "Object storage service log init failed: " << ex.what() << std::endl;
+    exit(EXIT_FAILURE);
+  }
+
+  logger->debug("logger initialized");
+
   flush_thread = std::make_unique<std::thread>(&ObjectStore::flush, this);
 }
 
@@ -49,11 +66,17 @@ int ObjectStore::put_object(const std::string &object_name, const uint32_t offse
 
   object = search_object(object_name, true);
 
+  logger->debug(fmt::sprintf("[ObjectStore] w(%d) ow(%d) put_object object_name(%s) offset(%d) data(%s)\n",
+    ++w_count, ++object->w_cnt, object_name.c_str(), offset, data.c_str()));
+
   // When creating a new object, it's possible that it has no body. Like when filesystem open a new file.
   // Directory has no data throughout its lifetime.
   if (!data.empty()) {
     object_write(object, offset, data);
   }
+
+  logger->debug(fmt::sprintf("[ObjectStore] w(%d) ow(%d) put_object: object_name(%s) offset(%d): success\n",
+    --w_count, --object->w_cnt, object_name.c_str(), offset));
 
   return 0;
 }
@@ -69,9 +92,6 @@ void ObjectStore::object_write(std::shared_ptr<Object> object, const uint32_t of
   bool was_dirty = !object->dirty_buffers.empty();
   const char *data_ptr;
   uint32_t new_blocks;
-
-  //fprintf(stderr, "[OS] object_write start_lbn(%d) end_lbn(%d) offset(%d) size(%d)\n", 
-  //  lbn_start, lbn_end, offset, data.size());
 
   std::lock_guard<std::mutex> lock(object->mutex);
 
@@ -206,6 +226,9 @@ int ObjectStore::get_object(const std::string &object_name, std::string &out, co
     return 0;
   }
 
+  logger->debug(fmt::sprintf("[ObjectStore] r(%d) or(%d) get_object: object_name(%s) offset(%d) size(%d)\n",
+    ++r_count, ++object->r_cnt, object_name.c_str(), offset, size));
+
   request = std::make_shared<IoRequest>(OP_READ);
 
   std::lock_guard<std::mutex> lock(object->mutex);
@@ -258,6 +281,9 @@ int ObjectStore::get_object(const std::string &object_name, std::string &out, co
   }
 
   //fprintf(stderr, "[OS] get_object final result(%s)\n", out.c_str());
+
+  logger->debug(fmt::sprintf("[ObjectStore] r(%d) or(%d) get_object: object_name(%s) offset(%d) size(%d) result(%s)\n",
+    --r_count, --object->r_cnt, object_name.c_str(), offset, size, out.c_str()));
 
   return 0;
 }

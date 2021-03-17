@@ -61,13 +61,7 @@ class Buffer: NoCopy {
     flags.mark(B_VALID);
   }
 
-  void copy_data(const char *data, uint32_t buf_offset, uint32_t data_offset, uint32_t size) {
-    std::lock_guard<std::mutex> lock(mutex);
-
-    //fprintf(stderr, "[buffer] copy pbn(%d) buf_offset(%d) data_offset(%d) data_size(%d)\n",
-    //  pbn, buf_offset, data_offset, size);
-    memcpy(buf + buf_offset, data + data_offset, size);
-  }
+  void copy_data(const char *data, uint32_t buf_offset, uint32_t data_offset, uint32_t size);
 
   uint32_t buffer_size;
   std::mutex mutex;

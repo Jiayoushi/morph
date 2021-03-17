@@ -25,7 +25,8 @@ struct BlockRange {
 
 class Bitmap {
  public:
-  Bitmap(uint32_t total_blocks):
+  Bitmap(uint32_t total_blocks, uint8_t max_retry):
+    MAX_RETRY(max_retry),
     free_blocks_cnt(total_blocks),
     bitmap(total_blocks / 8) {
     assert(total_blocks % 8 == 0);
@@ -35,8 +36,9 @@ class Bitmap {
   pbn_t allocate_blocks(uint32_t count) {
     pbn_t pbn;
     int res;
+    uint8_t retry;
 
-    while (true) {
+    for (retry = 0; retry < MAX_RETRY; ++retry) {
       {
         std::unique_lock<std::mutex> lock(bitmap_mutex);
     
@@ -53,6 +55,8 @@ class Bitmap {
 
       std::this_thread::sleep_for(std::chrono::microseconds(10));
     }
+
+    assert(retry != MAX_RETRY);
 
     return pbn;
   }
@@ -118,6 +122,8 @@ class Bitmap {
   std::condition_variable bitmap_empty;
 
   std::vector<std::bitset<8>> bitmap;
+
+  const uint8_t MAX_RETRY;
 };
 
 enum IoOperation {

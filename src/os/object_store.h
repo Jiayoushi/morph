@@ -54,6 +54,8 @@ class Object {
   typedef std::map<lbn_t, Extent>::iterator EXTENT_TREE_ITER;
 
   Object():
+    w_cnt(0),
+    r_cnt(0),
     size(0)
   {}
 
@@ -86,6 +88,9 @@ class Object {
  private:
   friend class ObjectStore;
 
+  std::atomic<uint32_t> w_cnt;
+  std::atomic<uint32_t> r_cnt;
+
   std::mutex mutex;
 
   std::list<std::shared_ptr<Buffer>> dirty_buffers;
@@ -104,7 +109,7 @@ class ObjectStore {
  public:
   ObjectStore() = delete;
 
-  ObjectStore(ObjectStoreOptions oso = ObjectStoreOptions());
+  ObjectStore(uint32_t id, ObjectStoreOptions oso = ObjectStoreOptions());
 
   ~ObjectStore();
 
@@ -144,6 +149,13 @@ class ObjectStore {
   std::mutex index_mutex;
 
   std::unordered_map<std::string, std::shared_ptr<Object>> index;
+
+  std::shared_ptr<spdlog::logger> logger;
+
+  uint32_t id;
+
+  std::atomic<uint32_t> w_count;
+  std::atomic<uint32_t> r_count;
 };
 
 }

@@ -29,6 +29,7 @@ const uint8_t JOURNAL_TRANSACTION_SYNC_INTERVAL  = 1;
 struct BlockStoreOptions {
   uint32_t TOTAL_BLOCKS = 16;
   uint16_t BLOCK_SIZE = 512;
+  uint8_t ALLOCATE_RETRY = 3;
   std::string STORE_FILE = "/media/jyshi/mydisk/blocks";
 };
 
