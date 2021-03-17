@@ -27,6 +27,9 @@ std::shared_ptr<Buffer> BufferManager::get_buffer(pbn_t pbn) {
     std::this_thread::sleep_for(std::chrono::microseconds(10));
   }
 
+  //fprintf(stderr, "[Buffer] get_buffer pbn(%d) buffer->pbn(%d) DIRTY(%d) UPTODATE(%d)\n", 
+  //  pbn, buffer->pbn, flag_marked(buffer, B_DIRTY), flag_marked(buffer, B_UPTODATE));
+
   return buffer;
 }
 

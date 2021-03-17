@@ -16,16 +16,26 @@
 namespace morph {
 
 enum BUFFER_FLAG {
+  // Do we even need this?
   B_VALID = 0,
+
+  // write will make a buffer dirty
   B_DIRTY = 1,
+
+  // 1. write that makes a buffer dirty, 2. read from disk 
+  // makes a buffer UPTODATE
   B_UPTODATE = 3,
+
+  // A RMW does not need to read from disk a buffer that is B_NEW
+  B_NEW = 4,
 };
 
 class Buffer: NoCopy {
  public:
   Buffer() = delete;
 
-  Buffer(uint32_t buffer_size) {
+  Buffer(uint32_t size):
+    buffer_size(size) {
     buf = (char *)aligned_alloc(512, buffer_size);
     if (buf == nullptr) {
       perror("failed to allocate aligned buffer");
@@ -39,6 +49,7 @@ class Buffer: NoCopy {
   }
 
   void reset() {
+    memset(buf, ' ', buffer_size);
     pbn = 0;
     ref = 0;
     flags.reset();
@@ -53,9 +64,12 @@ class Buffer: NoCopy {
   void copy_data(const char *data, uint32_t buf_offset, uint32_t data_offset, uint32_t size) {
     std::lock_guard<std::mutex> lock(mutex);
 
+    //fprintf(stderr, "[buffer] copy pbn(%d) buf_offset(%d) data_offset(%d) data_size(%d)\n",
+    //  pbn, buf_offset, data_offset, size);
     memcpy(buf + buf_offset, data + data_offset, size);
   }
 
+  uint32_t buffer_size;
   std::mutex mutex;
   Flags<64> flags;
   pbn_t pbn;                              // Physical block number

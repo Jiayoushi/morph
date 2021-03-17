@@ -16,37 +16,36 @@ struct ObjectUnit {
   {}
 };
 
-void object_read_write(ObjectStore &os) {
+void object_read_write(ObjectStore &os, const std::string &name, uint32_t ACTION_COUNT, uint32_t CONTENT_LIMIT) {
   uint32_t off;
   uint32_t size;
-  std::string send_buf;
-  std::string get_buf;
-  const uint32_t action_count = 200;
-  char buf[4096];
-
-  size = std::max(5, rand() % 20);
-  get_garbage(buf, size);
-  const std::string name(buf, size);
-
-  size = std::max(1, rand() % 4096);
+  char buf[CONTENT_LIMIT];
+  
+  size = std::max(1u, rand() % CONTENT_LIMIT);
   get_garbage(buf, size);
   const std::string content(buf, size);
 
-  fprintf(stderr, "[TEST] the name is [%s] content is [%s]\n", name.c_str(), content.c_str());
+  //fprintf(stderr, "[TEST] the name is [%s] content is [%s]\n", name.c_str(), content.c_str());
   os.put_object(name, 0, "");
 
-  for (uint32_t i = 0; i < action_count; ++i) {
+  for (uint32_t i = 0; i < ACTION_COUNT; ++i) {
     off = rand() % content.size();
     size = std::max(1ul, rand() % (content.size() - off));
-    send_buf = std::string(content.c_str() + off, size);
+    std::string send_buf(content.c_str() + off, size);
+    std::string get_buf;
 
-    fprintf(stderr, "[TEST] attemp to write off(%d) data(%s)\n", off, send_buf.c_str());
+    //fprintf(stderr, "[TEST] attemp to write off(%d) data(%s)\n", off, send_buf.c_str());
     os.put_object(name, off, send_buf);
 
-    fprintf(stderr, "[TEST] attemp to read off(%d) data(%s)\n", off, send_buf.c_str());
+    //fprintf(stderr, "[TEST] attemp to read off(%d) data(%s)\n", off, send_buf.c_str());
     os.get_object(name, get_buf, off, size);
 
-    EXPECT_EQ(send_buf, get_buf);
+    //fprintf(stderr, "[TEST] EXPECT EQ\n");
+
+    ASSERT_EQ(send_buf, get_buf);
+
+    //get_buf.clear();
+    //fprintf(stderr, "[TEST] SUCCESS\n");
   }
 }
 
@@ -102,7 +101,28 @@ TEST(ObjectStoreTest, basic_read_write) {
   ObjectStoreOptions opts;
   ObjectStore os(opts);
 
-  object_read_write(os);
+  object_read_write(os, "obj1", 300, 4096);
+
+  object_read_write(os, "obj2", 300, 12378);
+}
+
+
+TEST(ObjectStoreTest, concurrent_read_write) {
+  {
+    ObjectStoreOptions opts;
+    opts.bmo.BUFFER_SIZE = 100;
+    ObjectStore os(opts);
+    std::vector<std::thread> threads;
+    
+    for (int i = 0; i < 3; ++i) {
+      std::string name = std::string("obj") + std::to_string(i);
+      threads.push_back(std::thread(object_read_write, std::ref(os), name, 300, 5678));
+    }
+
+    for (auto &p: threads) {
+      p.join();
+    }
+  }
 }
 
 int main(int argc, char *argv[]) {

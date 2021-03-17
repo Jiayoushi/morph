@@ -44,6 +44,8 @@ void BlockStore::write_to_disk(pbn_t pbn, const char *data) {
   // TODO: I don't know if this lock is necessary or not... need to figure it out later
   std::lock_guard<std::mutex> lock(rw);
 
+  //fprintf(stderr, "[DISK] write pbn(%d) data(%s)\n", pbn, std::string(data, opts.BLOCK_SIZE).c_str());
+
   while (written != opts.BLOCK_SIZE) {
     written = pwrite(fd, data, opts.BLOCK_SIZE, pbn * opts.BLOCK_SIZE);
     if (written < 0) {
@@ -55,7 +57,7 @@ void BlockStore::write_to_disk(pbn_t pbn, const char *data) {
     }
   }
 
-  fprintf(stderr, "[DISK] write pbn(%d) data(%s)\n", pbn, std::string(data, opts.BLOCK_SIZE).c_str());
+  //fprintf(stderr, "[DISK] write pbn(%d) done\n", pbn);
 }
 
 void BlockStore::read_from_disk(pbn_t pbn, char *data) {

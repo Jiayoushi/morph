@@ -119,7 +119,8 @@ class ObjectStore {
 
   void object_write(std::shared_ptr<Object> object, const uint32_t offset, const std::string &data);
 
-  std::shared_ptr<Buffer> get_block(std::shared_ptr<Object> object, lbn_t lbn, lbn_t lbn_end, bool create);
+  std::shared_ptr<Buffer> get_block(std::shared_ptr<Object> object, lbn_t lbn, lbn_t lbn_end, 
+                                    bool create, uint32_t new_blocks);
 
   void write_buffer(std::shared_ptr<Object> object, std::shared_ptr<Buffer> buffer, 
                     const char *data_ptr, uint32_t buf_offset, uint32_t size);
