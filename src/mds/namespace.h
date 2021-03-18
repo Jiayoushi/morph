@@ -9,7 +9,7 @@
 #include <common/types.h>
 #include <common/nocopy.h>
 #include <common/options.h>
-#include <os/journal.h>
+#include <mds/journal.h>
 #include <grpcpp/grpcpp.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <proto_out/mds.grpc.pb.h>

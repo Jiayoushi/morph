@@ -6,15 +6,13 @@
 
 namespace morph {
 
-using rocksdb::DB;
-
 class MdStore {
  public:
   MdStore();
   ~MdStore();
 
  private:
-  DB *db;
+  rocksdb::DB *db;
 };
 
 

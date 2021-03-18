@@ -45,9 +45,6 @@ struct Extent {
 
 };
 
-//enum OBJECT_FLAG {
-//  B_DIRTY = 0,
-//};
 
 class Object {
  public:

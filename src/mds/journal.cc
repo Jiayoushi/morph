@@ -1,4 +1,4 @@
-#include <os/journal.h>
+#include <mds/journal.h>
 
 #include <unistd.h>
 #include <fcntl.h>

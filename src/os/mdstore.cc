@@ -20,7 +20,7 @@ MdStore::MdStore() {
   options.OptimizeLevelStyleCompaction();
   options.create_if_missing = true;
 
-  s = DB::Open(options, STORAGE_DIRECTORY + "/metadata", &db);
+  s = rocksdb::DB::Open(options, STORAGE_DIRECTORY + "/metadata", &db);
   assert(s.ok());
 }
 

@@ -33,20 +33,6 @@ include_directories(/usr/local/include)
 include_directories(src)
 include_directories(.)
 
-file(GLOB SOURCES 
-  "src/mds/*.cc"
-  "src/client/*.cc"
-  "src/tests/*.cc"
-  "src/os/journal.cc"
-  "src/common/*.cc"
-  "proto_out/*.cc")
-
-add_executable(test
-  ${SOURCES})
-add_executable(math_server
-  src/tests/rpc/server.cc)
-add_executable(math_client
-  src/tests/rpc/client.cc)
 add_executable(block_store_test
   src/os/block_store.cc
   src/os/buffer.cc
@@ -56,52 +42,27 @@ add_executable(object_store_test
   src/os/buffer.cc
   src/os/object_store.cc
   src/tests/os/object_store.cc)
+add_executable(third_party_test
+  src/tests/third_party.cc)
 
-add_library(math_grpc_proto
-  "proto_out/math.pb.cc"
-  "proto_out/math.pb.h"
-  "proto_out/math.grpc.pb.cc"
-  "proto_out/math.grpc.pb.h")
 add_library(morph_grpc_proto
   "proto_out/mds.pb.cc"
   "proto_out/mds.pb.h"
   "proto_out/mds.grpc.pb.cc"
   "proto_out/mds.grpc.pb.h")
 
-
-target_link_libraries(math_grpc_proto
-  ${_REFLECTION}
-  ${_GRPC_GRPCPP}
-  ${_PROTOBUF_LIBPROTOBUF})
 target_link_libraries(morph_grpc_proto
   ${_REFLECTION}
   ${_GRPC_GRPCPP}
   ${_PROTOBUF_LIBPROTOBUF})
-target_link_libraries(math_server
-  math_grpc_proto
-  ${_REFLECTION}
-  ${_GRPC_GRPCPP}
-  ${_PROTOBUF_LIBPROTOBUF})
-target_link_libraries(math_client
-  math_grpc_proto
-  ${_REFLECTION}
-  ${_GRPC_GRPCPP}
-  ${_PROTOBUF_LIBPROTOBUF})
-target_link_libraries(test
-  Threads::Threads
-  gRPC::grpc++
-  morph_grpc_proto
-  ${_REFLECTION}
-  ${_GRPC_GRPCPP}
-  ${_PROTOBUF_LIBPROTOBUF}
-  /usr/local/lib/libspdlog.a
-  /usr/local/lib/librpc.a
+target_link_libraries(block_store_test
+  gtest)
+target_link_libraries(object_store_test
+  gtest)
+target_link_libraries(third_party_test
+  gtest
   /usr/local/lib/librocksdb.a
   /usr/lib/x86_64-linux-gnu/libsnappy.so
   /usr/lib/x86_64-linux-gnu/liblz4.so.1
   /usr/lib/x86_64-linux-gnu/libdl.so
   /usr/lib/x86_64-linux-gnu/libz.so)
-target_link_libraries(block_store_test
-  gtest)
-target_link_libraries(object_store_test
-  gtest)

@@ -124,104 +124,12 @@ void Test::test_integration() {
 }
 
 
-struct Item {
-  int item;
-  Item(){}
-  Item(int x):
-    item(x) {}
-
-  MSGPACK_DEFINE_ARRAY(item);
-};
-
-class MYINODE {
- public:
-  int inode_number;
-  std::vector<Item> items;
-  
-  MSGPACK_DEFINE_ARRAY(inode_number, items);
-};
-
-void Test::test_msgpack() {
-  MYINODE inode;
-  
-  std::stringstream ss;
-  inode.items.emplace_back(5);
-  inode.items.emplace_back(6);
-  inode.items.emplace_back(7);
-  inode.inode_number = 110;
-
-  clmdep_msgpack::pack(ss, inode);
-
-  std::string buffer(ss.str());
-  clmdep_msgpack::object_handle oh = clmdep_msgpack::unpack(buffer.data(), buffer.size());
-  clmdep_msgpack::object deserialized = oh.get();
-  MYINODE inode2;
-  deserialized.convert(inode2);
-
-  assert(inode2.inode_number == inode.inode_number);
-  assert(inode2.items[0].item == inode.items[0].item);
-  assert(inode2.items[1].item == inode.items[1].item);
-  assert(inode2.items[2].item == inode.items[2].item);
-
-  std::cout << "test_msgpack passed" << std::endl; 
-}
-
-void Test::test_rocksdb() {
-  using rocksdb::DB;
-  using rocksdb::Options;
-  using rocksdb::Status;
-  using rocksdb::WriteBatch;
-  using rocksdb::WriteOptions;
-  using rocksdb::ReadOptions;
-
-  const std::string kDBPath = "/tmp/rocksdb_simple_example";
-  DB *db;
-  Options options;
-  Status s;
-  std::string value;
-
-  options.IncreaseParallelism();
-  options.OptimizeLevelStyleCompaction();
-  options.create_if_missing = true;
-
-  s = DB::Open(options, kDBPath, &db);
-  assert(s.ok());
-
-  s = db->Put(WriteOptions(), "key1", "value");
-  assert(s.ok());
-  s = db->Get(ReadOptions(), "key1", &value);
-  assert(s.ok());
-  assert(value == "value");
-
-  // atomically apply a set of updates
-  
-  WriteBatch batch;
-  batch.Delete("key1");
-  batch.Put("key2", value);
-  s = db->Write(WriteOptions(), &batch);
-
-  s = db->Get(ReadOptions(), "key1", &value);
-  assert(s.IsNotFound());
-
-  db->Get(ReadOptions(), "key2", &value);
-  assert(value == "value");
-
-  delete db;
-
-  std::cout << "test_rocksdb passed" << std::endl;
-}
-
-}
-
 int main() {
   morph::Test test;
 
   // test dependencies
-  test.test_msgpack();
-  test.test_rocksdb();
 
   test.test_integration();
-  //test.test_mkdir();
 
   std::cout << "All Tests Passed." << std::endl;
 
