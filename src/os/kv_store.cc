@@ -151,12 +151,6 @@ void KvStore::write_routine() {
   }
 }
 
-
-/* RocksDB supports atomic flush of multiple column families if the DB option atomic_flush is set to true. 
- * The execution result of flushing multiple column families is written to the MANIFEST with 'all-or-nothing' guarantee 
- * (logically). With atomic flush, either all or no memtables of the column families of interest are persisted to 
- * SST files and added to the database.
- */
 void KvStore::flush_routine() {
   rocksdb::Status s;
 
