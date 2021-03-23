@@ -12,6 +12,7 @@
 #include <common/types.h>
 #include <common/blocking_queue.h>
 #include <os/buffer.h>
+#include <rpc/msgpack.hpp>
 
 namespace morph {
 
@@ -26,9 +27,9 @@ struct BlockRange {
 class Bitmap {
  public:
   Bitmap(uint32_t total_blocks, uint8_t max_retry):
-    MAX_RETRY(max_retry),
-    free_blocks_cnt(total_blocks),
-    bitmap(total_blocks / 8) {
+      MAX_RETRY(max_retry),
+      free_blocks_cnt(total_blocks),
+      bits(total_blocks / 8) {
     assert(total_blocks % 8 == 0);
   }
 
@@ -56,6 +57,8 @@ class Bitmap {
       std::this_thread::sleep_for(std::chrono::microseconds(10));
     }
 
+    // TODO: external fragmentation or simply out of memory
+    //       the latter probably does not need to be addressed, but the first one.
     assert(retry != MAX_RETRY);
 
     return pbn;
@@ -65,7 +68,7 @@ class Bitmap {
   int find_free(uint32_t count, pbn_t &allocated_start) {
     uint32_t cnt = 0;
 
-    for (pbn_t pbn = 0; pbn < bitmap.size() * 8; ++pbn) {
+    for (pbn_t pbn = 0; pbn < bits.size() * 8; ++pbn) {
       if (get_value(pbn) == USED) {
         cnt = 0;
         continue;
@@ -85,13 +88,13 @@ class Bitmap {
 
     // TODO: can be optimized
     for (int i = 0; i < count; ++i) {
-      bitmap[pbn / 8][pbn % 8] = value;
+      bits[pbn / 8][pbn % 8] = value;
       ++pbn;
     }
   }
 
   int get_value(pbn_t pbn) {
-    return bitmap[pbn / 8][pbn % 8];
+    return bits[pbn / 8][pbn % 8];
   }
 
   void free_blocks(pbn_t start, uint32_t count) {
@@ -121,7 +124,7 @@ class Bitmap {
 
   std::condition_variable bitmap_empty;
 
-  std::vector<std::bitset<8>> bitmap;
+  std::vector<std::bitset<8>> bits;
 
   const uint8_t MAX_RETRY;
 };
@@ -188,7 +191,40 @@ class BlockStore: NoCopy {
 
   void io();
 
+  // TODO: this is gonna be slow if the entire bitmap is serialized everytime it's modified
+  std::string serialize_bitmap() {
+    std::stringstream ss;
+    std::vector<unsigned long> vs;
+
+    for (const std::bitset<8> &set: bitmap->bits) {
+      vs.push_back(set.to_ulong());
+    }
+
+    clmdep_msgpack::pack(ss, vs);
+    return ss.str();
+  }
+
+  void deserialize_bitmap(const std::string &v) {
+    std::vector<unsigned long> out;
+
+    clmdep_msgpack::object_handle handle = clmdep_msgpack::unpack(v.data(), v.size());
+    clmdep_msgpack::object deserialized = handle.get();
+    deserialized.convert(out);
+
+    // You must set the total blocks to the previous value
+    assert(out.size() == bitmap->bits.size());
+  
+    bitmap->bits.clear();
+    for (uint32_t i = 0; i < out.size(); ++i) {
+      bitmap->bits.emplace_back(out[i]);
+    }
+
+  }
+
+  void stop();
+
   const BlockStoreOptions opts;
+
 
  private:
   void write_to_disk(pbn_t pbn, const char *data);
@@ -198,6 +234,7 @@ class BlockStore: NoCopy {
   void do_io(const std::shared_ptr<Buffer> &buffer, IoOperation op);
 
   std::mutex rw;
+
   int fd;
 
   std::unique_ptr<Bitmap> bitmap;
@@ -208,7 +245,6 @@ class BlockStore: NoCopy {
   std::unique_ptr<std::thread> io_thread;
 
   morph::BlockingQueue<std::shared_ptr<IoRequest>> io_requests;
-
 };
 
 }

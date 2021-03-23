@@ -27,6 +27,7 @@ const uint8_t JOURNAL_TRANSACTION_CLOSE_INTERVAL = 1;
 const uint8_t JOURNAL_TRANSACTION_SYNC_INTERVAL  = 1;
 
 struct BlockStoreOptions {
+  bool recover = false;
   uint32_t TOTAL_BLOCKS = 16;
   uint16_t BLOCK_SIZE = 512;
   uint8_t ALLOCATE_RETRY = 3;
@@ -36,18 +37,31 @@ struct BlockStoreOptions {
 struct BufferManagerOptions {
   uint32_t TOTAL_BUFFERS = 16;
   uint16_t BUFFER_SIZE = 512;
-  uint8_t ALLOCATE_RETRY = 3;
+};
+
+struct KvStoreOptions {
+  bool recover = false;
+  uint32_t MAX_TXN_HANDLES = 3;
+  std::string ROCKSDB_FILE = "/media/jyshi/mydisk/rocks";
+  std::string WAL_DIR = "/media/jyshi/mydisk/wal_dir";
 };
 
 struct ObjectStoreOptions {
+  bool recover = false;
+
   BlockStoreOptions bso;
+
   BufferManagerOptions bmo;
+
+  KvStoreOptions kso;
 
   ObjectStoreOptions():
     bso(),
-    bmo()
+    bmo(),
+    kso()
   {}
 };
+
 
 }
 

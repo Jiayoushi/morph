@@ -40,6 +40,7 @@ add_executable(block_store_test
 add_executable(object_store_test
   src/os/block_store.cc
   src/os/buffer.cc
+  src/os/kv_store.cc
   src/os/object_store.cc
   src/tests/os/object_store.cc)
 add_executable(third_party_test
@@ -58,7 +59,12 @@ target_link_libraries(morph_grpc_proto
 target_link_libraries(block_store_test
   gtest)
 target_link_libraries(object_store_test
-  gtest)
+  gtest
+  /usr/local/lib/librocksdb.a
+  /usr/lib/x86_64-linux-gnu/libsnappy.so
+  /usr/lib/x86_64-linux-gnu/liblz4.so.1
+  /usr/lib/x86_64-linux-gnu/libdl.so
+  /usr/lib/x86_64-linux-gnu/libz.so)
 target_link_libraries(third_party_test
   gtest
   /usr/local/lib/librocksdb.a

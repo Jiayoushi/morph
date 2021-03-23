@@ -10,10 +10,16 @@
 namespace morph {
 
 BlockStore::BlockStore(BlockStoreOptions o):
-  opts(o),
-  running(true) {
+    opts(o),
+    running(true) {
+  int oflag;
 
-  fd = open(opts.STORE_FILE.c_str(), O_CREAT | O_RDWR | O_DIRECT | O_TRUNC | O_SYNC);
+  oflag = O_CREAT | O_RDWR | O_DIRECT | O_SYNC;
+  if (!o.recover) {
+    oflag |= O_TRUNC;
+  }
+
+  fd = open(opts.STORE_FILE.c_str(), oflag);
   if (fd < 0) {
     perror("failed to open file to store buffers");
     exit(EXIT_FAILURE);
@@ -25,9 +31,14 @@ BlockStore::BlockStore(BlockStoreOptions o):
 }
 
 BlockStore::~BlockStore() {
-  io_requests.push(nullptr);
-  io_thread->join();
-  close(fd);
+  if (running) {
+    stop();
+  }
+
+  if (close(fd) < 0) {
+    perror("failed to close block store file");
+    exit(EXIT_FAILURE);
+  }
 }
 
 pbn_t BlockStore::allocate_blocks(uint32_t count) {
@@ -38,13 +49,13 @@ void BlockStore::free_blocks(pbn_t start_block, uint32_t count) {
   bitmap->free_blocks(start_block, count);
 }
 
+// TODO: should it be better to use writev?
+//       how does DIRECT_IO work under the hood, should BLOCK_SIZE be set accordingly?
 void BlockStore::write_to_disk(pbn_t pbn, const char *data) {
   ssize_t written = 0;
 
   // TODO: I don't know if this lock is necessary or not... need to figure it out later
   std::lock_guard<std::mutex> lock(rw);
-
-  //fprintf(stderr, "[DISK] write pbn(%d) data(%s)\n", pbn, std::string(data, opts.BLOCK_SIZE).c_str());
 
   while (written != opts.BLOCK_SIZE) {
     written = pwrite(fd, data, opts.BLOCK_SIZE, pbn * opts.BLOCK_SIZE);
@@ -56,8 +67,6 @@ void BlockStore::write_to_disk(pbn_t pbn, const char *data) {
       exit(EXIT_FAILURE);
     }
   }
-
-  //fprintf(stderr, "[DISK] write pbn(%d) done\n", pbn);
 }
 
 void BlockStore::read_from_disk(pbn_t pbn, char *data) {
@@ -75,8 +84,6 @@ void BlockStore::read_from_disk(pbn_t pbn, char *data) {
       exit(EXIT_FAILURE);
     }
   }
-
-  //fprintf(stderr, "[DISK] read pbn(%d) data(%s)\n", pbn, std::string(data, BLOCK_SIZE).c_str());
 }
 
 void BlockStore::submit_io(std::shared_ptr<IoRequest> request) {
@@ -109,13 +116,7 @@ void BlockStore::do_io(const std::shared_ptr<Buffer> &buffer, IoOperation op) {
 void BlockStore::io() {
   std::shared_ptr<IoRequest> request;
 
-  while (true) {
-    if (!running) {
-      if (io_requests.empty()) {
-        break;
-      }
-    }
-
+  while (running) {
     request = io_requests.pop();
 
     // Signal that it's time to exit
@@ -133,6 +134,17 @@ void BlockStore::io() {
     request->status = IO_COMPLETED;
     request->io_complete.notify_one();
   }
+}
+
+void BlockStore::stop() {
+  while (!io_requests.empty()) {
+    std::this_thread::yield();
+  }
+
+  running = false;
+  io_requests.push(nullptr);
+
+  io_thread->join();
 }
 
 }

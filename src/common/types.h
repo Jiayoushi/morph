@@ -7,15 +7,15 @@
 
 namespace morph {
 
-typedef uint64_t cid_t;        // Client's id
-typedef uint8_t  type_t;
-typedef uint32_t op_t;
-typedef uint64_t hid_t;        // Handle id
-typedef uint64_t rid_t;        // Request id
-typedef uint32_t pbn_t;     // Physical Block number
-typedef uint32_t lbn_t;        // Logical Block Number
+using cid_t  = uint64_t;        // Client's id
+using type_t = uint8_t;
+using op_t   = uint32_t;
+using hid_t  = uint64_t;        // Handle id
+using rid_t  = uint64_t;        // Request id
+using pbn_t  = uint32_t;     // Physical Block number
+using lbn_t  = uint32_t;        // Logical Block Number
 
-typedef std::string LogBuffer;
+using LogBuffers = std::string;
 
 // TODO: gotta move this somewhere else
 struct stat {

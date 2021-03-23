@@ -19,7 +19,7 @@ MorphFsClient::MorphFsClient(const cid_t cid, const std::shared_ptr<Channel> cha
 
   try {
     std::string filepath = LOGGING_DIRECTORY + "/client-log-" + std::to_string(cid) + ".txt";
-    logger = spdlog::basic_logger_mt("client_logger_" + std::to_string(cid), filepath, true);
+    logger = spdlog::basic_logger_mt("client_logger_" + std::to_string(cid) + std::to_string(rand()), filepath, true);
     logger->set_level(LOGGING_LEVEL);
     logger->flush_on(FLUSH_LEVEL);
   } catch (const spdlog::spdlog_ex &ex) {

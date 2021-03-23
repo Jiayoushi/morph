@@ -11,7 +11,7 @@ namespace morph {
 MetadataServer::MetadataServer(const std::string &mds_addr, std::shared_ptr<grpc::Channel> channel) {
   try {
     std::string filepath = LOGGING_DIRECTORY + "/mds_" + mds_addr;
-    logger = spdlog::basic_logger_mt("mds_" + mds_addr, filepath, true);
+    logger = spdlog::basic_logger_mt("mds_" + mds_addr + std::to_string(rand()), filepath, true);
     logger->set_level(LOGGING_LEVEL);
     logger->flush_on(FLUSH_LEVEL);
   } catch (const spdlog::spdlog_ex &ex) {

@@ -16,6 +16,11 @@ class BlockingQueue: NoCopy {
     queue()
   {}
 
+  const T &front() {
+    std::lock_guard<std::mutex> lock(mutex);
+    return queue.front();
+  }
+
   void push(const T &x) {
     std::lock_guard<std::mutex> lock(mutex);
     queue.push_back(x);

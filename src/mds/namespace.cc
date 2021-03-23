@@ -11,8 +11,7 @@ const ino_t FIRST_INODE_NUMBER = 1;
 namespace morph {
 
 Namespace::Namespace(std::shared_ptr<grpc::Channel> channel, std::shared_ptr<spdlog::logger> logger):
-  next_inode_number(FIRST_INODE_NUMBER),
-  journal() {
+  next_inode_number(FIRST_INODE_NUMBER) {
   std::shared_ptr<Inode> root_inode;
   
   root = allocate_inode<InodeDirectory>(INODE_TYPE::DIRECTORY, 0, 0);

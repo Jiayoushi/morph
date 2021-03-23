@@ -15,7 +15,7 @@ grpc::Status ObjectStoreService::get_object(ServerContext *context, const GetObj
   std::string *buf = new std::string();
   buf->reserve(request->size());
 
-  ret_val = object_store.read_object(request->object_name(), *buf, request->offset(), request->size());
+  ret_val = object_store.get_object(request->object_name(), *buf, request->offset(), request->size());
 
   reply->set_ret_val(ret_val);
   reply->set_allocated_body(buf);

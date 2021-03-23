@@ -9,7 +9,6 @@
 #include <common/types.h>
 #include <common/nocopy.h>
 #include <common/options.h>
-#include <mds/journal.h>
 #include <grpcpp/grpcpp.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <proto_out/mds.grpc.pb.h>
@@ -152,8 +151,6 @@ class Namespace: NoCopy {
   std::unordered_map<ino_t, std::shared_ptr<Inode>> inode_map;
 
   std::shared_ptr<spdlog::logger> logger;
-
-  Journal journal;
 
   /* Remote safe storage */
   //std::unique_ptr<StorageService::Stub> storage_stub;
