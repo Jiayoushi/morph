@@ -20,7 +20,7 @@ const std::string STORAGE_DIRECTORY = "persist";
 /* RPC */
 
 /* Journal */
-const char *const JOURNAL_DIRECTORY              = "."; //"/media/jyshi/mydisk";
+const char *const JOURNAL_DIRECTORY              = "."; //"/media/jyshi/abcde";
 const uint16_t JOURNAL_BLOCK_SIZE                = 1024;
 const uint32_t JOURNAL_FILE_SIZE_THRESHOLD       = 4096;
 const uint8_t JOURNAL_TRANSACTION_CLOSE_INTERVAL = 1;
@@ -28,22 +28,24 @@ const uint8_t JOURNAL_TRANSACTION_SYNC_INTERVAL  = 1;
 
 struct BlockStoreOptions {
   bool recover = false;
-  uint32_t TOTAL_BLOCKS = 16;
-  uint16_t BLOCK_SIZE = 512;
+  uint32_t TOTAL_BLOCKS = 1024;
+  uint16_t block_size = 512;
   uint8_t ALLOCATE_RETRY = 3;
-  std::string STORE_FILE = "/media/jyshi/mydisk/blocks";
+  uint32_t min_num_event = 1;
+  int max_num_event = 100;
+  std::string STORE_FILE = "/media/jyshi/abcde/blocks";
 };
 
 struct BufferManagerOptions {
-  uint32_t TOTAL_BUFFERS = 16;
-  uint16_t BUFFER_SIZE = 512;
+  uint32_t TOTAL_BUFFERS = 1000;
+  uint16_t BUFFER_SIZE = 512;      // TODO: delete
 };
 
 struct KvStoreOptions {
   bool recover = false;
   uint32_t MAX_TXN_HANDLES = 3;
-  std::string ROCKSDB_FILE = "/media/jyshi/mydisk/rocks";
-  std::string WAL_DIR = "/media/jyshi/mydisk/wal_dir";
+  std::string ROCKSDB_FILE = "/media/jyshi/abcde/rocks";
+  std::string WAL_DIR = "/media/jyshi/abcde/wal_dir";
 };
 
 struct ObjectStoreOptions {

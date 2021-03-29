@@ -12,9 +12,12 @@ void Buffer::copy_data(const char *data, uint32_t buf_offset, uint32_t data_offs
   memcpy(buf + buf_offset, data + data_offset, size);
 }
 
-BufferManager::BufferManager(BufferManagerOptions o):
-  opts(o) {
+BufferManager::BufferManager():
+    BufferManager(BufferManagerOptions())
+{}
 
+BufferManager::BufferManager(BufferManagerOptions o):
+    opts(o) {
   for (uint32_t i = 0; i < opts.TOTAL_BUFFERS; ++i) {
     free_list.push_back(std::make_shared<Buffer>(opts.BUFFER_SIZE));
   }
@@ -45,7 +48,9 @@ std::shared_ptr<Buffer> BufferManager::try_get_buffer(pbn_t pbn) {
 
   buffer = lookup_index(pbn);
   if (buffer != nullptr) {
-    free_list_remove(pbn);
+    if (buffer->ref == 0) {
+      free_list_remove(pbn);
+    }
   } else {
     if (free_list.empty()) {
       return nullptr;
@@ -60,13 +65,18 @@ std::shared_ptr<Buffer> BufferManager::try_get_buffer(pbn_t pbn) {
     }
 
     assert(!flag_marked(buffer, B_DIRTY));
-     
+    
+    if (flag_marked(buffer, B_VALID)) {
+      index.erase(buffer->pbn);
+    }
+
     index.emplace(pbn, buffer);
 
     buffer->init(pbn);
   }
 
   ++buffer->ref;
+
 
   return buffer;
 }
@@ -76,7 +86,8 @@ void BufferManager::put_buffer(std::shared_ptr<Buffer> buffer) {
 
   assert(buffer != nullptr);
 
-  if (--buffer->ref == 0) {
+  --buffer->ref;
+  if (buffer->ref == 0) {
     free_list_push(buffer);
   }
 }

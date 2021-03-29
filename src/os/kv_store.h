@@ -41,9 +41,7 @@ struct LogHandle {
 
   std::list<Log> logs;
 
-  std::mutex mutex;
-
-  std::condition_variable on_disk;
+  std::function<void()> post_log_callback;
 
   LogHandle() = delete;
 
@@ -64,14 +62,6 @@ struct LogHandle {
     }
 
     logs.emplace_back(type, std::move(key), std::move(data));
-  }
-
-  void wait() {
-    std::unique_lock<std::mutex> lock(mutex);
-    on_disk.wait(lock,
-      [this]() {
-        return this->flushed;
-      });
   }
 };
 
@@ -104,14 +94,14 @@ class Transaction {
       flags.mark(TXN_CLOSED);
     }
 
-    ++open_txns;
+    open_txns++;
 
     std::lock_guard<std::mutex> lock(mutex);
     handles.push_back(handle);
   }
 
   void close_handle(std::shared_ptr<LogHandle> handle) {
-    --open_txns;
+    open_txns--;
 
     if (flags.marked(TXN_CLOSED) && open_txns == 0) {
       flags.mark(TXN_COMPLETE);
@@ -172,6 +162,27 @@ class KvStore {
     handle->transaction->close_handle(handle);
   }
 
+  // When there are writes to the same buffer, the second write needs to wait for the first
+  // The first guess the first write is still in the open transaction, so it wants the
+  // open transaction to be closed immediately, even though the previous write might be in a
+  // closed transaction.
+  void force_close_open_txn() {
+    std::lock_guard<std::mutex> lock(mutex);
+
+    if (!open_txn->has_handles()) {
+      return;
+    }
+
+    //fprintf(stderr, "FORCE CLOSE THIS SHIT\n");
+
+    flag_mark(open_txn, TXN_CLOSED);
+    if (open_txn->open_txns == 0) {
+      flag_mark(open_txn, TXN_COMPLETE);
+    }
+    closed_txns.push(open_txn);
+    open_txn = get_transaction();
+  }
+
   void stop();
 
  private:
@@ -203,8 +214,6 @@ class KvStore {
 
   KvStoreOptions opts;
 
-
-  //BlockingQueue<std::shared_ptr<Transaction>> written_txns;
   std::atomic<uint32_t> written_txns;
 
   BlockingQueue<std::shared_ptr<Transaction>> closed_txns;

@@ -34,10 +34,12 @@ include_directories(src)
 include_directories(.)
 
 add_executable(block_store_test
+  src/os/block_allocator.cc
   src/os/block_store.cc
   src/os/buffer.cc
   src/tests/os/block_store.cc)
 add_executable(object_store_test
+  src/os/block_allocator.cc
   src/os/block_store.cc
   src/os/buffer.cc
   src/os/kv_store.cc
@@ -57,8 +59,10 @@ target_link_libraries(morph_grpc_proto
   ${_GRPC_GRPCPP}
   ${_PROTOBUF_LIBPROTOBUF})
 target_link_libraries(block_store_test
-  gtest)
+  gtest
+  -laio)
 target_link_libraries(object_store_test
+  -laio
   gtest
   /usr/local/lib/librocksdb.a
   /usr/lib/x86_64-linux-gnu/libsnappy.so

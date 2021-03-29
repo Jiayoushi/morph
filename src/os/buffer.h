@@ -26,7 +26,7 @@ enum BUFFER_FLAG {
   // makes a buffer UPTODATE
   B_UPTODATE = 3,
 
-  // A RMW does not need to read from disk a buffer that is B_NEW
+  // An unaligned buffer does not need to read from disk, if the buffer is B_NEW
   B_NEW = 4,
 };
 
@@ -64,19 +64,26 @@ class Buffer: NoCopy {
   void copy_data(const char *data, uint32_t buf_offset, uint32_t data_offset, uint32_t size);
 
   uint32_t buffer_size;
+
   std::mutex mutex;
+
+  std::condition_variable write_complete;
+
   Flags<64> flags;
+
   pbn_t pbn;                              // Physical block number
+
   uint32_t ref;
+
   char *buf;
 };
 
 
 class BufferManager {
  public:
-  BufferManager() = delete;
+  BufferManager();
 
-  BufferManager(BufferManagerOptions opts = BufferManagerOptions());
+  BufferManager(BufferManagerOptions opts);
 
   std::shared_ptr<Buffer> get_buffer(pbn_t b);
 
@@ -121,19 +128,31 @@ class BufferManager {
   }
 
   void free_list_push(std::shared_ptr<Buffer> buffer) {
+    assert(buffer->ref == 0);
     for (auto p = free_list.begin(); p != free_list.end(); ++p) {
       if (flag_marked(*p, B_VALID) && p->get()->pbn == buffer->pbn) {
         assert(0);
       }
     }
+    //fprintf(stderr, " put buffer %d ref %d in the free list\n", buffer->pbn, buffer->ref);
     free_list.push_front(buffer);
     assert(free_list.size() <= opts.TOTAL_BUFFERS);
   }
 
   void free_list_remove(pbn_t pbn) {
-    free_list.remove_if([pbn](std::shared_ptr<Buffer> buf) {
-      return flag_marked(buf, B_VALID) && buf->pbn == pbn;
-      });
+    for (auto p = free_list.begin(); p != free_list.end(); ++p) {
+      if (flag_marked((*p), B_VALID) && (*p)->pbn == pbn) {
+        free_list.erase(p);
+        //fprintf(stderr, "REMOVE buffer(%d) from the freelist\n", pbn);
+        return;
+      }
+    }
+
+    std::cerr << pbn << " not in the free list " << std::endl;
+
+    //free_list.remove_if([pbn](std::shared_ptr<Buffer> buf) {
+    //  return flag_marked(buf, B_VALID) && buf->pbn == pbn;
+    //  });
   }
 
   // Applies to any modification to index and free_list

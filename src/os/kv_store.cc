@@ -53,14 +53,14 @@ void KvStore::init_db(const bool recovery) {
 
     s = DB::Open(options, opts.ROCKSDB_FILE, column_families, &handles, &db);
     if (!s.ok()) {
-      std::cerr << "Failed to open rocksdb: " << opts.ROCKSDB_FILE << " " << s.ToString() << std::endl;
+      std::cerr << "Failed to open(0) rocksdb: " << opts.ROCKSDB_FILE << " " << s.ToString() << std::endl;
       exit(EXIT_FAILURE);
     }
 
   } else {
     s = DB::Open(options, opts.ROCKSDB_FILE, &db);
     if (!s.ok()) {
-      std::cerr << "Failed to open rocksdb: " << opts.ROCKSDB_FILE << " " << s.ToString() << std::endl;
+      std::cerr << "Failed to open(1) rocksdb: " << opts.ROCKSDB_FILE << " " << s.ToString() << std::endl;
       exit(EXIT_FAILURE);
     }
 
@@ -142,12 +142,14 @@ void KvStore::write_routine() {
       std::cerr << "Failed to write batch " << s.ToString() << std::endl;
       exit(EXIT_FAILURE);
     }
-
+ 
+    //fprintf(stderr, "[KV] TRANSACTION %d is written, it's time to call post_log_callback\n", transaction->id);
     for (const auto &handle: transaction->handles) {
-      std::unique_lock<std::mutex> lock(handle->mutex);
-      handle->flushed = true;
-      handle->on_disk.notify_one();
+      if (handle->post_log_callback) {
+        handle->post_log_callback();
+      }
     }
+    //fprintf(stderr, "[KV] TRANSACTION %d is written, callbacks are called\n", transaction->id);
   }
 }
 

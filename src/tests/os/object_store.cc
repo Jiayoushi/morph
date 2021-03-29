@@ -32,6 +32,7 @@ void object_random_read_write(ObjectStore &os, const std::string &name, uint32_t
     std::string get_buf;
 
     os.put_object(name, off, send_buf);
+
     os.get_object(name, get_buf, off, size);
 
     ASSERT_EQ(get_buf, send_buf);
@@ -55,7 +56,7 @@ void object_sequential_read(ObjectStore &os, const std::string &name, const std:
   uint32_t to_read;
 
   for (uint32_t off = 0; off < content.size(); off += to_read) {
-    to_read = std::min(content.size() - off, (1ul + rand() % 8096));
+    to_read = 512; //std::min(content.size() - off, (1ul + rand() % 8096));
     std::string expect_buf(content.c_str() + off, to_read);
     std::string get_buf;
 
@@ -112,38 +113,36 @@ TEST(ObjectStoreTest, ObjectExtent) {
 }
 
 TEST(ObjectStoreTest, BasicReadWrite) {
-  {
-    ObjectStoreOptions opts;
-    opts.kso.ROCKSDB_FILE = "/media/jyshi/mydisk/rocks1";
-    opts.kso.WAL_DIR = "/media/jyshi/mydisk/rocks1_wal";
-    ObjectStore os(1, opts);
+  ObjectStoreOptions opts;
+  opts.kso.ROCKSDB_FILE = "/media/jyshi/abcde/rocks1";
+  opts.kso.WAL_DIR = "/media/jyshi/abcde/rocks1_wal";
+  ObjectStore os(1, opts);
 
-    object_random_read_write(os, "obj1", 200, 4096);
-  }
+  object_random_read_write(os, "obj1", 20, 4096);
+}
 
-  {
-    ObjectStoreOptions opts;
-    opts.kso.ROCKSDB_FILE = "/media/jyshi/mydisk/rocks2";
-    opts.kso.WAL_DIR = "/media/jyshi/mydisk/rocks2_wal";
-    ObjectStore os(2, opts);
-    object_random_read_write(os, "obj2", 200, 5678);
-  }
+TEST(ObjectStoreTest, BasicReadWrite2) {
+  ObjectStoreOptions opts;
+  opts.kso.ROCKSDB_FILE = "/media/jyshi/abcde/rocks2";
+  opts.kso.WAL_DIR = "/media/jyshi/abcde/rocks2_wal";
+  ObjectStore os(2, opts);
+  object_random_read_write(os, "obj2", 20, 5678);
+}
 
-  {
-    ObjectStoreOptions opts;
-    opts.kso.ROCKSDB_FILE = "/media/jyshi/mydisk/rocks3";
-    opts.kso.WAL_DIR = "/media/jyshi/mydisk/rocks3_wal";
-    opts.bso.TOTAL_BLOCKS = 32;
-    opts.bmo.TOTAL_BUFFERS = 25;
-    ObjectStore os(3, opts);
-    object_random_read_write(os, "obj3", 200, 12378);
-  }
+TEST(ObjectStoreTest, BasicReadWrite3) {
+  ObjectStoreOptions opts;
+  opts.kso.ROCKSDB_FILE = "/media/jyshi/abcde/rocks3";
+  opts.kso.WAL_DIR = "/media/jyshi/abcde/rocks3_wal";
+  opts.bso.TOTAL_BLOCKS = 32;
+  opts.bmo.TOTAL_BUFFERS = 25;
+  ObjectStore os(3, opts);
+  object_random_read_write(os, "obj3", 20, 12378);
 }
 
 TEST(ObjectStoreTest, ConcurrentReadWrite) {
   ObjectStoreOptions opts;
-  opts.kso.ROCKSDB_FILE = "/media/jyshi/mydisk/rocks4";
-  opts.kso.WAL_DIR = "/media/jyshi/mydisk/rocks4_wal";
+  opts.kso.ROCKSDB_FILE = "/media/jyshi/abcde/rocks4";
+  opts.kso.WAL_DIR = "/media/jyshi/abcde/rocks4_wal";
   opts.bmo.TOTAL_BUFFERS = 100;
   opts.bso.TOTAL_BLOCKS = 320;
   ObjectStore os(0, opts);
@@ -151,7 +150,7 @@ TEST(ObjectStoreTest, ConcurrentReadWrite) {
     
   for (int i = 0; i < 5; ++i) {
     std::string name = std::string("obj") + std::to_string(i);
-    threads.push_back(std::thread(object_random_read_write, std::ref(os), name, 300, 5678));
+    threads.push_back(std::thread(object_random_read_write, std::ref(os), name, 20, 5678));
   }
 
   for (auto &p: threads) {
@@ -160,20 +159,20 @@ TEST(ObjectStoreTest, ConcurrentReadWrite) {
 }
 
 TEST(ObjectStoreTest, RecoverAfterSafeExit) {
-  const uint32_t FILE_SIZE = 40000;
+  const uint32_t FILE_SIZE = 40960;
   std::vector<std::string> names;
   std::vector<std::string> contents;
 
   {
     ObjectStoreOptions opts;
-    opts.kso.ROCKSDB_FILE = "/media/jyshi/mydisk/rocks5";
-    opts.kso.WAL_DIR = "/media/jyshi/mydisk/rocks5_wal";
+    opts.kso.ROCKSDB_FILE = "/media/jyshi/abcde/rocks5";
+    opts.kso.WAL_DIR = "/media/jyshi/abcde/rocks5_wal";
     opts.bmo.TOTAL_BUFFERS = 8 * 10;
-    opts.bso.TOTAL_BLOCKS = FILE_SIZE / 10;
+    opts.bso.TOTAL_BLOCKS = FILE_SIZE / 8;
     ObjectStore os(0, opts);
     std::vector<std::thread> threads;
     
-    for (int i = 0; i < 2; ++i) {
+    for (int i = 0; i < 1; ++i) {
       names.push_back(std::string("obj") + std::to_string(i));
       contents.push_back(std::move(get_garbage(FILE_SIZE)));
       threads.push_back(std::thread(object_sequential_write, std::ref(os), names[i], contents[i].c_str()));
@@ -188,13 +187,13 @@ TEST(ObjectStoreTest, RecoverAfterSafeExit) {
   opts.recover = true;
   opts.bso.recover = true;
   opts.kso.recover = true;
-  opts.kso.ROCKSDB_FILE = "/media/jyshi/mydisk/rocks5";
-  opts.kso.WAL_DIR = "/media/jyshi/mydisk/rocks5_wal";
+  opts.kso.ROCKSDB_FILE = "/media/jyshi/abcde/rocks5";
+  opts.kso.WAL_DIR = "/media/jyshi/abcde/rocks5_wal";
   opts.bmo.TOTAL_BUFFERS = 100;
-  opts.bso.TOTAL_BLOCKS = FILE_SIZE / 10;
+  opts.bso.TOTAL_BLOCKS = FILE_SIZE / 8;
   ObjectStore os(0, opts);
 
-  for (int i = 0; i < 2; ++i) {
+  for (int i = 0; i < 1; ++i) {
     object_sequential_read(os, names[i], contents[i]);
   }
 }

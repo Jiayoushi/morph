@@ -30,6 +30,12 @@ std::string get_garbage(size_t size) {
   return std::string(buf, size);
 }
 
+void get_garbage(std::string &s) {
+   for (int i = 0; i < s.size(); ++i) {
+    s[i] = 97 + (rand() % 26);
+  }
+}
+
 }
 
 #endif

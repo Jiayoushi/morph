@@ -19,20 +19,6 @@ const uint8_t OBJECT_NAME_INVALID = 3;
 
 const uint32_t INVALID_EXTENT = std::numeric_limits<uint32_t>::max();
 
-
-struct WriteUnit {
-  std::shared_ptr<LogHandle> handle;
-
-  std::list<std::shared_ptr<Buffer>> dirty_buffers;
-
-  WriteUnit() = delete;
-
-  WriteUnit(std::shared_ptr<LogHandle> hd):
-    handle(hd)
-  {}
-};
-
-
 struct Extent {
   lbn_t start_lbn;       // The first logical block number
   lbn_t end_lbn;         // The last logical block number (included)
@@ -97,6 +83,17 @@ class Object {
     extent_tree.emplace(end_lbn, Extent(start_lbn, end_lbn, start_pbn));
   }
 
+  void record_request(const std::shared_ptr<IoRequest> req) {
+    std::lock_guard<std::mutex> lock(pw_mutex);
+    assert(pending_writes.find(req->buffers.front()->pbn) == pending_writes.end());
+    pending_writes.emplace(std::make_pair(req->buffers.front()->pbn, req));
+  }
+
+  void remove_request(const std::shared_ptr<IoRequest> req) {
+    std::lock_guard<std::mutex> lock(pw_mutex);
+    pending_writes.erase(req->buffers.front()->pbn);
+  }
+
   MSGPACK_DEFINE_ARRAY(extent_tree);
 
  private:
@@ -105,7 +102,16 @@ class Object {
   std::atomic<uint32_t> w_cnt;
   std::atomic<uint32_t> r_cnt;
 
+  // mutex for read and write operations
   std::mutex mutex;
+
+  // mutex for the pending writes data structure below
+  std::mutex pw_mutex;
+
+  // a list of write requests to keep shared_ptr of write requests alive after aio is submitted
+  // the key is the first physical block number of the buffers
+  // TODO: we probably don't need this? As IoRequest is kept alive by the std::bind?
+  std::unordered_map<pbn_t, std::shared_ptr<IoRequest>> pending_writes;
 
   // TODO: not used yet
   uint32_t size;
@@ -145,13 +151,58 @@ class ObjectStore {
   std::shared_ptr<Buffer> get_block(std::shared_ptr<Object> object, lbn_t lbn, lbn_t lbn_end, 
                                     bool create, uint32_t new_blocks);
 
-  void write_buffer(std::shared_ptr<Buffer> buffer, const char *data_ptr, uint32_t buf_offset, uint32_t size);
+  void write_buffer(const std::shared_ptr<Object> &objec, std::shared_ptr<Buffer> buffer, 
+                    const char *data_ptr, uint32_t buf_offset, uint32_t size);
 
-  void read_buffer(std::shared_ptr<Buffer> buffer);
+  std::shared_ptr<IoRequest> allocate_io_request(const std::shared_ptr<Object> owner, IoOperation op) {
+    std::shared_ptr<IoRequest> req;
 
-  void flush_routine();
+    req = std::make_shared<IoRequest>(op);
+    if (op == OP_WRITE) {
+      req->post_complete_callback = std::bind(&ObjectStore::post_write, this, owner, req);
+    } else {
+      req->post_complete_callback = std::bind(&ObjectStore::post_read, this, req);
+    }
 
+    return req;
+  }
 
+  // Called by the kv_store after a write call is journaled
+  void post_log(std::shared_ptr<IoRequest> request) {
+    //fprintf(stderr, "[os] post_log: let's fucking push request pbn(%d) op(%d)\n", 
+    //  request->buffers.front()->pbn, request->op);
+    block_store.push_request(request);
+  }
+
+  void post_write(const std::shared_ptr<Object> owner, const std::shared_ptr<IoRequest> &request) {
+    // Important: remove the request should be placed before waking up any processes waiting for the buffers
+    owner->remove_request(request);
+
+    for (const std::shared_ptr<Buffer> &buffer: request->buffers) {
+        //fprintf(stderr, "[OS] post_write: attempt to unmark %d dirty bit. request first pbn(%d)\n", 
+        //  buffer->pbn, request->buffers.front()->pbn);
+        flag_unmark(buffer, B_DIRTY);
+        {
+          std::unique_lock<std::mutex> lock(buffer->mutex);
+          buffer->write_complete.notify_one();
+        }
+        //fprintf(stderr, "write release buffer %d ref %d\n", buffer->pbn, buffer->ref);
+        buffer_manager.put_buffer(buffer);
+    }
+
+    //fprintf(stderr, "callback end\n");
+  }
+
+  void post_read(const std::shared_ptr<IoRequest> &request) {
+    //fprintf(stderr, "post read called for %d\n", request->buffers.front()->pbn);
+    for (const std::shared_ptr<Buffer> &buffer: request->buffers) {
+      flag_mark(buffer, B_UPTODATE);
+    }
+  }
+
+  void read_buffer(const std::shared_ptr<Object> &object, std::shared_ptr<Buffer> buffer);
+
+  // Read the metadata and replay the data log after restart or crash
   void recover();
 
   // 0000000....00145-object_sara-138
@@ -163,7 +214,7 @@ class ObjectStore {
 
   std::atomic<bool> running;
 
-  std::unique_ptr<std::thread> flush_thread;
+  //std::unique_ptr<std::thread> flush_thread;
 
   BlockStore block_store;
 
@@ -171,7 +222,7 @@ class ObjectStore {
 
   KvStore kv_store;
 
-  BlockingQueue<std::shared_ptr<WriteUnit>> write_queue;
+  //BlockingQueue<std::shared_ptr<IoRequest>> write_queue;
 
   std::recursive_mutex index_mutex;
 

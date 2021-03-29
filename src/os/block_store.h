@@ -1,6 +1,7 @@
 #ifndef MORPH_OS_BLOCK_STORE
 #define MORPH_OS_BLOCK_STORE
 
+#include <libaio.h>
 #include <iostream>
 #include <string>
 #include <memory>
@@ -12,6 +13,7 @@
 #include <common/types.h>
 #include <common/blocking_queue.h>
 #include <os/buffer.h>
+#include <os/block_allocator.h>
 #include <rpc/msgpack.hpp>
 
 namespace morph {
@@ -22,111 +24,6 @@ class Buffer;
 struct BlockRange {
   pbn_t start_pbn;
   uint32_t block_count;
-};
-
-class Bitmap {
- public:
-  Bitmap(uint32_t total_blocks, uint8_t max_retry):
-      MAX_RETRY(max_retry),
-      free_blocks_cnt(total_blocks),
-      bits(total_blocks / 8) {
-    assert(total_blocks % 8 == 0);
-  }
-
-  // TODO: the waiting scheme does not look good...
-  pbn_t allocate_blocks(uint32_t count) {
-    pbn_t pbn;
-    int res;
-    uint8_t retry;
-
-    for (retry = 0; retry < MAX_RETRY; ++retry) {
-      {
-        std::unique_lock<std::mutex> lock(bitmap_mutex);
-    
-        if (free_blocks_cnt >= count) {
-          res = find_free(count, pbn);
-          if (res == 0) {
-            free_blocks_cnt -= count;
-            set_values(pbn, count, USED);
-
-            break;
-          }
-        }
-      }
-
-      std::this_thread::sleep_for(std::chrono::microseconds(10));
-    }
-
-    // TODO: external fragmentation or simply out of memory
-    //       the latter probably does not need to be addressed, but the first one.
-    assert(retry != MAX_RETRY);
-
-    return pbn;
-  }
-
-  // TODO: this is pretty slow, need a buddy algorithm or what...
-  int find_free(uint32_t count, pbn_t &allocated_start) {
-    uint32_t cnt = 0;
-
-    for (pbn_t pbn = 0; pbn < bits.size() * 8; ++pbn) {
-      if (get_value(pbn) == USED) {
-        cnt = 0;
-        continue;
-      }
-
-      if (++cnt == count) {
-        allocated_start = pbn - count + 1;
-        return 0;
-      }
-    }
-
-    return -1;
-  }
-
-  void set_values(pbn_t pbn, uint32_t count, int value) {
-    assert(value == FREE || value == USED);
-
-    // TODO: can be optimized
-    for (int i = 0; i < count; ++i) {
-      bits[pbn / 8][pbn % 8] = value;
-      ++pbn;
-    }
-  }
-
-  int get_value(pbn_t pbn) {
-    return bits[pbn / 8][pbn % 8];
-  }
-
-  void free_blocks(pbn_t start, uint32_t count) {
-    std::unique_lock<std::mutex> lock(bitmap_mutex);
-    
-    free_blocks_cnt += count;
-
-    set_values(start, count, FREE);
-  }
-
-  uint32_t free_blocks_count() {
-    std::lock_guard<std::mutex> lock(bitmap_mutex);
-    return free_blocks_cnt;
-  }
-
- private:
-  friend class BlockStore;
-
-  enum BlockState {
-    FREE = 0,
-    USED = 1
-  };
-
-  uint32_t free_blocks_cnt;
-
-  std::mutex bitmap_mutex;
-
-  std::condition_variable bitmap_empty;
-
-  std::vector<std::bitset<8>> bits;
-
-  const uint8_t MAX_RETRY;
 };
 
 enum IoOperation {
@@ -142,12 +39,20 @@ enum IoRequestStatus {
 
 struct IoRequest {
   std::list<std::shared_ptr<Buffer>> buffers;
+
   IoOperation op;
 
   std::atomic<int> status;
 
   std::mutex mutex;
+
   std::condition_variable io_complete;
+
+
+  // Called after the request is completed
+  std::function<void()> post_complete_callback;
+
+  IoRequest() = delete;
 
   IoRequest(IoOperation o):
     op(o),
@@ -156,6 +61,12 @@ struct IoRequest {
 
   bool is_completed() {
     return status.load() == IO_COMPLETED;
+  }
+
+  void signal_complete() {
+    std::unique_lock<std::mutex> lock(mutex);
+    status = IO_COMPLETED;
+    io_complete.notify_one();
   }
 
   void wait_for_completion() {
@@ -171,11 +82,13 @@ struct IoRequest {
 // TODO: it's possible that this buffer will become locked at some point?
 //       so it's better to use try lock. So a request will become half written and processed later.
 //       in that case we also need a ptr to point to the buffer that waits to be processed (not already processed)
+//
+// TODO: do i need O_SYNC? Or is it better to fsync once in a while and truncate txns in the kv_store accordingly?
 class BlockStore: NoCopy {
  public:
-  BlockStore() = delete;
+  BlockStore();
 
-  BlockStore(BlockStoreOptions o = BlockStoreOptions());
+  BlockStore(BlockStoreOptions o);
 
   ~BlockStore();
 
@@ -187,38 +100,18 @@ class BlockStore: NoCopy {
     return bitmap->free_blocks_count();
   }
 
-  void submit_io(std::shared_ptr<IoRequest> request);
+  void push_request(std::shared_ptr<IoRequest> request);
 
-  void io();
 
   // TODO: this is gonna be slow if the entire bitmap is serialized everytime it's modified
+  // TODO: and along with the put, free, shouldn't these belong to the allocator itself?
+  //       it's pretty verbose for now.
   std::string serialize_bitmap() {
-    std::stringstream ss;
-    std::vector<unsigned long> vs;
-
-    for (const std::bitset<8> &set: bitmap->bits) {
-      vs.push_back(set.to_ulong());
-    }
-
-    clmdep_msgpack::pack(ss, vs);
-    return ss.str();
+    return bitmap->serialize();
   }
 
   void deserialize_bitmap(const std::string &v) {
-    std::vector<unsigned long> out;
-
-    clmdep_msgpack::object_handle handle = clmdep_msgpack::unpack(v.data(), v.size());
-    clmdep_msgpack::object deserialized = handle.get();
-    deserialized.convert(out);
-
-    // You must set the total blocks to the previous value
-    assert(out.size() == bitmap->bits.size());
-  
-    bitmap->bits.clear();
-    for (uint32_t i = 0; i < out.size(); ++i) {
-      bitmap->bits.emplace_back(out[i]);
-    }
-
+    bitmap->deserialize(v);
   }
 
   void stop();
@@ -227,11 +120,13 @@ class BlockStore: NoCopy {
 
 
  private:
-  void write_to_disk(pbn_t pbn, const char *data);
+  void submit_routine();
 
-  void read_from_disk(pbn_t pbn, char *data); 
+  void submit_write(const std::shared_ptr<IoRequest> &request, struct iocb *iocb);
 
-  void do_io(const std::shared_ptr<Buffer> &buffer, IoOperation op);
+  void submit_read(const std::shared_ptr<IoRequest> &request, struct iocb *iocb); 
+
+  void reap_routine();
 
   std::mutex rw;
 
@@ -241,10 +136,17 @@ class BlockStore: NoCopy {
 
   std::atomic<bool> running;
 
-  // Thread responsible of read/write
-  std::unique_ptr<std::thread> io_thread;
+  // Thread responsible of submitting io
+  std::unique_ptr<std::thread> submit_thread;
+
+  // Thread responsible of reaping the completed io
+  std::unique_ptr<std::thread> reap_thread;
 
   morph::BlockingQueue<std::shared_ptr<IoRequest>> io_requests;
+
+  io_context_t ioctx;
+
+  std::atomic<uint32_t> num_in_progress;
 };
 
 }

@@ -32,7 +32,7 @@ ObjectStore::ObjectStore(uint32_t idp, ObjectStoreOptions oso):
     recover();
   }
 
-  flush_thread = std::make_unique<std::thread>(&ObjectStore::flush_routine, this);
+  //flush_thread = std::make_unique<std::thread>(&ObjectStore::submit_routine, this);
 }
 
 ObjectStore::~ObjectStore() {
@@ -72,7 +72,7 @@ void ObjectStore::recover() {
     deserialize(p->value().ToString(), *object);
   }
 
-  // TODO: Replay the logs??
+  // TODO: Replay the data logs??
 }
 
 std::shared_ptr<Object> ObjectStore::allocate_object(const std::string &name) {
@@ -129,8 +129,8 @@ int ObjectStore::put_object(const std::string &object_name, const uint32_t offse
 // Requires the object's mutex to be held.
 void ObjectStore::object_write(std::shared_ptr<Object> object, const std::string &object_name,
                                const uint32_t offset, const std::string &data) {
-  const lbn_t lbn_start = offset / opts.bso.BLOCK_SIZE;
-  const lbn_t lbn_end = (offset + data.size()) / opts.bso.BLOCK_SIZE;
+  const lbn_t lbn_start = offset / opts.bso.block_size;
+  const lbn_t lbn_end = (offset + data.size()) / opts.bso.block_size;
   std::shared_ptr<Buffer> buffer;
   uint32_t unwritten;
   uint32_t size;
@@ -138,7 +138,7 @@ void ObjectStore::object_write(std::shared_ptr<Object> object, const std::string
   const char *data_ptr;
   uint32_t new_blocks;
   std::shared_ptr<LogHandle> handle;
-  std::shared_ptr<WriteUnit> write_unit;
+  std::shared_ptr<IoRequest> request;
   bool bitmap_modified;
 
   std::lock_guard<std::mutex> lock(object->mutex);
@@ -146,14 +146,17 @@ void ObjectStore::object_write(std::shared_ptr<Object> object, const std::string
   data_ptr = data.c_str();
   unwritten = data.size();
   new_blocks = 0;
-  handle = kv_store.start_transaction();
-  write_unit = std::make_shared<WriteUnit>(handle);
+  request = allocate_io_request(object, OP_WRITE);
+
   bitmap_modified = false;
 
   for (lbn_t lbn = lbn_start; 
        lbn <= lbn_end; 
        ++lbn, unwritten -= size, data_ptr += size) {
     buffer = get_block(object, lbn, lbn_end, true, new_blocks);
+
+    //fprintf(stderr, "[OS] object_write: write get buffer %d ref %d dirty(%d)\n", 
+    //  buffer->pbn, buffer->ref, flag_marked(buffer, B_DIRTY));
 
     // When get_block tries to allocate, it will allocate more than one blocks
     // So all blocks following the first one should be marked B_NEW
@@ -169,18 +172,30 @@ void ObjectStore::object_write(std::shared_ptr<Object> object, const std::string
       }
     }
 
+    // Since we use aio, there is no ordering. Then we must be sure that this buffer is not submiited
+    // until the previous buffer write is completed. 
+    // We don't know whether this buffer is inside the open transaction or not
+    // we just assume it is and then force close it so that it can be immediately written
     {
-      std::lock_guard<std::mutex> lock(buffer->mutex);
-
-      if (!flag_marked(buffer, B_DIRTY)) {
-        write_unit->dirty_buffers.push_back(buffer);
+      if (flag_marked(buffer, B_DIRTY)) {
+        kv_store.force_close_open_txn();
       }
+
+      std::unique_lock<std::mutex> lock(buffer->mutex);
+      buffer->write_complete.wait(lock,
+        [&buffer]() {
+          return !flag_marked(buffer, B_DIRTY);
+        });
+      request->buffers.push_back(buffer);
     }
 
-    buf_off = lbn == lbn_start ? offset % opts.bso.BLOCK_SIZE: 0;
-    size = std::min(opts.bso.BLOCK_SIZE - buf_off, unwritten);
-    write_buffer(buffer, data_ptr, buf_off, size);
+    buf_off = lbn == lbn_start ? offset % opts.bso.block_size: 0;
+    size = std::min(opts.bso.block_size - buf_off, unwritten);
+    write_buffer(object, buffer, data_ptr, buf_off, size);
   }
+
+  handle = kv_store.start_transaction();
+  handle->post_log_callback = std::bind(&ObjectStore::post_log, this, request);
 
   if (bitmap_modified) {
     handle->log(LOG_SYS_META,
@@ -197,11 +212,14 @@ void ObjectStore::object_write(std::shared_ptr<Object> object, const std::string
               std::move(get_data_key(handle->transaction->id, object_name, offset)), 
               std::move(std::string(buffer->buf, buffer->buffer_size)));
 
-  if (!write_unit->dirty_buffers.empty()) {
-    write_queue.push(write_unit);
-  }
+  assert(!request->buffers.empty());
+
+  //fprintf(stderr, "[OS] object_write: record_request: pbn(%d)\n", request->buffers.front()->pbn);
+  object->record_request(request);
 
   kv_store.end_transaction(handle);
+
+  //fprintf(stderr, "[OS] object_write offset(%d): call ended\n", offset);
 }
 
 std::shared_ptr<Buffer> ObjectStore::get_block(std::shared_ptr<Object> object, lbn_t lbn, lbn_t lbn_end, 
@@ -239,41 +257,46 @@ std::shared_ptr<Buffer> ObjectStore::get_block(std::shared_ptr<Object> object, l
     flag_mark(buffer, B_NEW);
   }
 
+
   return buffer;
 }
 
-void ObjectStore::write_buffer(std::shared_ptr<Buffer> buffer, 
+void ObjectStore::write_buffer(const std::shared_ptr<Object> &object, std::shared_ptr<Buffer> buffer, 
                                const char *data_ptr, uint32_t buf_offset, uint32_t size) {
-  if (size < opts.bso.BLOCK_SIZE && !flag_marked(buffer, B_NEW)) {
-    read_buffer(buffer);
+  if (size < opts.bso.block_size && !flag_marked(buffer, B_NEW)) {
+    read_buffer(object, buffer);
   }
 
   buffer->copy_data(data_ptr, buf_offset, 0, size);
 
+  //fprintf(stderr, "[OS] write_buffer: attempt to mark %d as dirty\n", buffer->pbn);
   flag_mark(buffer, B_DIRTY);
   flag_mark(buffer, B_UPTODATE);
   flag_unmark(buffer, B_NEW);
 }
 
 // TODO: is it a waste to allocate a request for a single buffer?
-void ObjectStore::read_buffer(std::shared_ptr<Buffer> buffer) {
+//       should get all the buffers ready before anything else!
+void ObjectStore::read_buffer(const std::shared_ptr<Object> &object, std::shared_ptr<Buffer> buffer) {
   std::shared_ptr<IoRequest> request;
 
   if (flag_marked(buffer, B_UPTODATE)) {
     return;
   }
 
-  request = std::make_shared<IoRequest>(OP_READ);
+  request = allocate_io_request(object, OP_READ);
   request->buffers.push_back(buffer);
 
-  block_store.submit_io(request);
+  //fprintf(stderr, "[OS] read_buffer: push_request pbn(%d) size(%lu)\n",
+  //  buffer->pbn, 1);
+  block_store.push_request(request);
 
   request->wait_for_completion();
 }
 
 int ObjectStore::get_object(const std::string &object_name, std::string &out, const uint32_t offset, const uint32_t size) {
-  const lbn_t lbn_start = offset / opts.bso.BLOCK_SIZE;
-  const lbn_t lbn_end = (offset + size) / opts.bso.BLOCK_SIZE;
+  const lbn_t lbn_start = offset / opts.bso.block_size;
+  const lbn_t lbn_end = (offset + size) / opts.bso.block_size;
   std::shared_ptr<Object> object;
   std::shared_ptr<Buffer> buffer;
   std::shared_ptr<IoRequest> request;
@@ -295,7 +318,7 @@ int ObjectStore::get_object(const std::string &object_name, std::string &out, co
   logger->debug(fmt::sprintf("[ObjectStore] r(%d) or(%d) get_object: object_name(%s) offset(%d) size(%d)\n",
     ++r_count, ++object->r_cnt, object_name.c_str(), offset, size));
 
-  request = std::make_shared<IoRequest>(OP_READ);
+  request = allocate_io_request(object, OP_READ);
 
   std::lock_guard<std::mutex> lock(object->mutex);
 
@@ -304,6 +327,8 @@ int ObjectStore::get_object(const std::string &object_name, std::string &out, co
        lbn <= lbn_end; 
        ++lbn) {
     buffer = get_block(object, lbn, lbn_end, false, 0);
+
+    //fprintf(stderr, " get read buffer %d ref %d\n", buffer->pbn, buffer->ref);
 
     if (buffer == nullptr) {
       return NO_CONTENT;
@@ -317,7 +342,9 @@ int ObjectStore::get_object(const std::string &object_name, std::string &out, co
   }
 
   if (!request->buffers.empty()) {
-    block_store.submit_io(request);
+    ///fprintf(stderr, "[OS] get_object: push_request pbn(%d) size(%lu)\n",
+    //  request->buffers.front()->pbn, request->buffers.size());
+    block_store.push_request(request);
     request->wait_for_completion();
   }
 
@@ -326,10 +353,8 @@ int ObjectStore::get_object(const std::string &object_name, std::string &out, co
   unread = size;
 
   for (const std::shared_ptr<Buffer> &buffer: buffers) {
-    flag_mark(buffer, B_UPTODATE);
-
-    buf_ptr = out_ptr == 0? offset % opts.bso.BLOCK_SIZE: 0;
-    bytes_to_read = std::min(opts.bso.BLOCK_SIZE - buf_ptr, unread);
+    buf_ptr = out_ptr == 0? offset % opts.bso.block_size: 0;
+    bytes_to_read = std::min(opts.bso.block_size - buf_ptr, unread);
 
     out.append(buffer->buf + buf_ptr, bytes_to_read);
 
@@ -341,6 +366,7 @@ int ObjectStore::get_object(const std::string &object_name, std::string &out, co
 
   // Release the buffers
   for (std::shared_ptr<Buffer> &buffer: buffers) {
+    //fprintf(stderr, "read release buffer %d ref %d\n", buffer->pbn, buffer->ref);
     buffer_manager.put_buffer(buffer);
   }
 
@@ -350,44 +376,11 @@ int ObjectStore::get_object(const std::string &object_name, std::string &out, co
   return 0;
 }
 
-// Flush dirty buffers
-void ObjectStore::flush_routine() {
-  std::shared_ptr<WriteUnit> write_unit;
-  std::shared_ptr<IoRequest> request;
-  bool has_dirty;
-  std::list<std::shared_ptr<IoRequest>> submitted;
-
-  while (running) {
-    while (write_queue.try_pop(write_unit)) {
-      request = std::make_shared<IoRequest>(OP_WRITE);
-
-      request->buffers = std::move(write_unit->dirty_buffers);
-
-      block_store.submit_io(request);
-      submitted.push_back(request);
-    }
-
-    // Handling buffers after they have been written
-    while (!submitted.empty() && submitted.front()->is_completed()) {
-      request = submitted.front();
-      submitted.pop_front();
-
-      for (std::shared_ptr<Buffer> &buffer: request->buffers) {
-        flag_unmark(buffer, B_DIRTY);
-
-        buffer_manager.put_buffer(buffer);
-      }
-    }
-
-    std::this_thread::yield();
-  }
-}
-
 void ObjectStore::stop() {
   kv_store.stop();
 
   running = false;
-  flush_thread->join();
+  //flush_thread->join();
 
   block_store.stop();
 }

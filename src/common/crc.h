@@ -6,7 +6,6 @@
 
 namespace morph {
 
-void build_crc32_table();
 uint32_t crc32_fast(const char *s, size_t n);
 
 

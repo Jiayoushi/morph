@@ -4,6 +4,8 @@
 #include <rocksdb/options.h>
 #include <tests/utils.h>
 #include <rpc/msgpack.hpp>
+#include <inttypes.h>
+#include <unistd.h>
 
 struct Ext {
   uint32_t a;
@@ -41,7 +43,7 @@ TEST(RocksdbTest, Basic) {
   using namespace rocksdb;
   using morph::get_garbage;
 
-  const std::string kDBPath = "/media/jyshi/mydisk/rocks101"; 
+  const std::string kDBPath = "/media/jyshi/abcde/rocks101"; 
   DB *db;
   Options options;
   Status s;
@@ -51,7 +53,7 @@ TEST(RocksdbTest, Basic) {
   options.IncreaseParallelism();
   options.OptimizeLevelStyleCompaction();
   options.create_if_missing = true;
-  options.wal_dir = "/media/jyshi/mydisk/wal101";
+  options.wal_dir = "/media/jyshi/abcde/wal101";
   options.manual_wal_flush = true;
 
   s = DB::Open(options, kDBPath, &db);
