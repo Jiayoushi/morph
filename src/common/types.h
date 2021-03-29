@@ -12,7 +12,6 @@ using type_t = uint8_t;
 using op_t   = uint32_t;
 using hid_t  = uint64_t;        // Handle id
 using rid_t  = uint64_t;        // Request id
-using pbn_t  = uint32_t;     // Physical Block number
 using lbn_t  = uint32_t;        // Logical Block Number
 
 using LogBuffers = std::string;

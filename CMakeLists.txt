@@ -43,6 +43,7 @@ add_executable(object_store_test
   src/os/block_store.cc
   src/os/buffer.cc
   src/os/kv_store.cc
+  src/os/object.cc
   src/os/object_store.cc
   src/tests/os/object_store.cc)
 add_executable(third_party_test

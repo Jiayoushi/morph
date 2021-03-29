@@ -17,7 +17,7 @@
 using morph::Buffer;
 using morph::BlockStore;
 using morph::BufferManager;
-using morph::pbn_t;
+using morph::lbn_t;
 using morph::get_garbage;
 using morph::BlockStoreOptions;
 using morph::BufferManagerOptions;
@@ -275,7 +275,7 @@ TEST(BlockStoreTest, ConcurrentAllocate) {
   std::vector<std::thread> actors;
   for (int i = 0; i < actors_count; ++i) {
     actors.push_back(std::thread([&bs, &opts]() {
-      pbn_t pbn;
+      lbn_t pbn;
       uint32_t count;
 
       for (int i = 0; i < action_count; ++i) {
@@ -305,7 +305,7 @@ TEST(BlockStoreTest, ConcurrentGetPutBlocks) {
   std::vector<std::thread> actors;
   for (int i = 0; i < actors_count; ++i) {
     actors.push_back(std::thread([&bs, &bm]() {
-      pbn_t pbn;
+      lbn_t pbn;
       std::list<std::shared_ptr<Buffer>> list;
       uint32_t count;
       std::shared_ptr<Buffer> buffer;
@@ -316,7 +316,7 @@ TEST(BlockStoreTest, ConcurrentGetPutBlocks) {
         pbn = bs->allocate_blocks(count);
 
         while (true) {
-          for (pbn_t p = pbn; p <= pbn + count; ++p) {
+          for (lbn_t p = pbn; p <= pbn + count; ++p) {
             buffer = bm->get_buffer(pbn);
             if (buffer != nullptr) {
               list.push_back(bm->get_buffer(pbn));
@@ -331,7 +331,7 @@ TEST(BlockStoreTest, ConcurrentGetPutBlocks) {
           break;
         }
  
-        for (pbn_t p = pbn; p <= pbn + count; ++p) {
+        for (lbn_t p = pbn; p <= pbn + count; ++p) {
           bm->put_buffer(list.front());
           list.pop_front();
         }
@@ -360,7 +360,7 @@ TEST(BlockStoreTest, ConcurrentReadWrite) {
       uint32_t buf_cnt = 0;
       std::shared_ptr<IoRequest> write_req;
       std::shared_ptr<IoRequest> read_req;
-      pbn_t pbn;
+      lbn_t pbn;
 
       for (uint32_t i = 0; i < action_count; ++i) {
         buf_cnt = 1 + (rand() % 3);

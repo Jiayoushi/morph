@@ -23,11 +23,11 @@ BufferManager::BufferManager(BufferManagerOptions o):
   }
 }
 
-std::shared_ptr<Buffer> BufferManager::get_buffer(pbn_t pbn) {
+std::shared_ptr<Buffer> BufferManager::get_buffer(lbn_t lbn) {
   std::shared_ptr<Buffer> buffer;
 
   while (true) {
-    buffer = try_get_buffer(pbn);
+    buffer = try_get_buffer(lbn);
     if (buffer != nullptr) {
       break;
     }
@@ -42,14 +42,14 @@ std::shared_ptr<Buffer> BufferManager::get_buffer(pbn_t pbn) {
   return buffer;
 }
 
-std::shared_ptr<Buffer> BufferManager::try_get_buffer(pbn_t pbn) {
+std::shared_ptr<Buffer> BufferManager::try_get_buffer(lbn_t lbn) {
   std::shared_ptr<Buffer> buffer;
   std::lock_guard<std::mutex> lock(global_mutex);
 
-  buffer = lookup_index(pbn);
+  buffer = lookup_index(lbn);
   if (buffer != nullptr) {
     if (buffer->ref == 0) {
-      free_list_remove(pbn);
+      free_list_remove(lbn);
     }
   } else {
     if (free_list.empty()) {
@@ -67,12 +67,12 @@ std::shared_ptr<Buffer> BufferManager::try_get_buffer(pbn_t pbn) {
     assert(!flag_marked(buffer, B_DIRTY));
     
     if (flag_marked(buffer, B_VALID)) {
-      index.erase(buffer->pbn);
+      index.erase(buffer->lbn);
     }
 
-    index.emplace(pbn, buffer);
+    index.emplace(lbn, buffer);
 
-    buffer->init(pbn);
+    buffer->init(lbn);
   }
 
   ++buffer->ref;

@@ -31,8 +31,6 @@ ObjectStore::ObjectStore(uint32_t idp, ObjectStoreOptions oso):
   if (opts.recover) {
     recover();
   }
-
-  //flush_thread = std::make_unique<std::thread>(&ObjectStore::submit_routine, this);
 }
 
 ObjectStore::~ObjectStore() {
@@ -227,11 +225,11 @@ std::shared_ptr<Buffer> ObjectStore::get_block(std::shared_ptr<Object> object, l
   std::shared_ptr<Buffer> buffer;
   Extent extent;
   uint32_t count;    /* How many blocks to allcoate if ncessary */
-  pbn_t pbn;
+  lbn_t pbn;
   bool allocated = false;
 
   if (object->search_extent(lbn, extent)) {
-    pbn = extent.start_pbn + (lbn - extent.start_lbn);
+    pbn = extent.lbn + (lbn - extent.start);
   } else {
     if (!create) {
       return nullptr;
@@ -239,7 +237,7 @@ std::shared_ptr<Buffer> ObjectStore::get_block(std::shared_ptr<Object> object, l
 
     if (extent.valid()) {
       count = std::min(lbn_end - lbn + 1,
-                        extent.start_lbn - lbn);
+                        extent.start - lbn);
     } else {
       count = lbn_end - lbn + 1;
     }
@@ -384,5 +382,35 @@ void ObjectStore::stop() {
 
   block_store.stop();
 }
+
+void ObjectStore::post_write(const std::shared_ptr<Object> owner, const std::shared_ptr<IoRequest> &request) {
+  // Important: remove the request should be placed before waking up any processes waiting for the buffers
+  owner->remove_request(request);
+
+  for (const std::shared_ptr<Buffer> &buffer: request->buffers) {
+      //fprintf(stderr, "[OS] post_write: attempt to unmark %d dirty bit. request first lbn(%d)\n", 
+      //  buffer->lbn, request->buffers.front()->lbn);
+      flag_unmark(buffer, B_DIRTY);
+      {
+        std::unique_lock<std::mutex> lock(buffer->mutex);
+        buffer->write_complete.notify_one();
+      }
+      buffer_manager.put_buffer(buffer);
+  }
+}
+
+std::shared_ptr<IoRequest> ObjectStore::allocate_io_request(const std::shared_ptr<Object> owner, IoOperation op) {
+  std::shared_ptr<IoRequest> req;
+
+  req = std::make_shared<IoRequest>(op);
+  if (op == OP_WRITE) {
+    req->post_complete_callback = std::bind(&ObjectStore::post_write, this, owner, req);
+  } else {
+    req->post_complete_callback = std::bind(&ObjectStore::post_read, this, req);
+  }
+
+  return req;
+}
+
 
 }

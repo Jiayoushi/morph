@@ -21,11 +21,6 @@ namespace morph {
 class Buffer;
 
 
-struct BlockRange {
-  pbn_t start_pbn;
-  uint32_t block_count;
-};
-
 enum IoOperation {
   OP_READ = 0,
   OP_WRITE = 1,
@@ -92,9 +87,9 @@ class BlockStore: NoCopy {
 
   ~BlockStore();
 
-  pbn_t allocate_blocks(uint32_t count);
+  lbn_t allocate_blocks(uint32_t count);
 
-  void free_blocks(pbn_t start_block, uint32_t count);
+  void free_blocks(lbn_t start_block, uint32_t count);
 
   uint32_t free_block_count() {
     return bitmap->free_blocks_count();

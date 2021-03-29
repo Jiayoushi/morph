@@ -2,8 +2,8 @@
 
 namespace morph {
 
-pbn_t Bitmap::allocate_blocks(uint32_t count) {
-  pbn_t pbn;
+lbn_t Bitmap::allocate_blocks(uint32_t count) {
+  lbn_t pbn;
   int res;
   uint8_t retry;
 
@@ -32,10 +32,10 @@ pbn_t Bitmap::allocate_blocks(uint32_t count) {
   return pbn;
 }
 
-int Bitmap::find_free(uint32_t count, pbn_t &allocated_start) {
+int Bitmap::find_free(uint32_t count, lbn_t &allocated_start) {
   uint32_t cnt = 0;
 
-  for (pbn_t pbn = 0; pbn < bits.size() * 8; ++pbn) {
+  for (lbn_t pbn = 0; pbn < bits.size() * 8; ++pbn) {
     if (get_value(pbn) == USED) {
       cnt = 0;
       continue;

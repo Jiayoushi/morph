@@ -23,12 +23,12 @@ class Bitmap {
   }
 
   // TODO: the waiting scheme does not look good...
-  pbn_t allocate_blocks(uint32_t count);
+  lbn_t allocate_blocks(uint32_t count);
 
   // TODO: this is pretty slow, need a buddy algorithm or what...
-  int find_free(uint32_t count, pbn_t &allocated_start);
+  int find_free(uint32_t count, lbn_t &allocated_start);
 
-  void set_values(pbn_t pbn, uint32_t count, int value) {
+  void set_values(lbn_t pbn, uint32_t count, int value) {
     assert(value == FREE || value == USED);
 
     // TODO: can be optimized
@@ -38,11 +38,11 @@ class Bitmap {
     }
   }
 
-  int get_value(pbn_t pbn) {
+  int get_value(lbn_t pbn) {
     return bits[pbn / 8][pbn % 8];
   }
 
-  void free_blocks(pbn_t start, uint32_t count) {
+  void free_blocks(lbn_t start, uint32_t count) {
     std::unique_lock<std::mutex> lock(bitmap_mutex);
     
     free_blocks_cnt += count;

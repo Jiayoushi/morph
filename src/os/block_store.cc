@@ -67,12 +67,12 @@ BlockStore::~BlockStore() {
 }
 
 // TODO: should these belong to the allocator class?
-pbn_t BlockStore::allocate_blocks(uint32_t count) {
+lbn_t BlockStore::allocate_blocks(uint32_t count) {
   return bitmap->allocate_blocks(count);
 }
 
 // TODO: same as above
-void BlockStore::free_blocks(pbn_t start_block, uint32_t count) {
+void BlockStore::free_blocks(lbn_t start_block, uint32_t count) {
   bitmap->free_blocks(start_block, count);
 }
 
@@ -82,7 +82,7 @@ void BlockStore::push_request(std::shared_ptr<IoRequest> request) {
 
 void BlockStore::submit_write(const std::shared_ptr<IoRequest> &request, struct iocb *iocb) {
   uint32_t iovcnt = request->buffers.size();
-  uint32_t offset = request->buffers.front()->pbn * opts.block_size;
+  uint32_t offset = request->buffers.front()->lbn * opts.block_size;
   struct iovec iov[iovcnt];
   uint32_t i;
   int ret;
@@ -90,8 +90,8 @@ void BlockStore::submit_write(const std::shared_ptr<IoRequest> &request, struct 
   i = 0;
   for (const auto &buffer: request->buffers) {
     if (!flag_marked(buffer, B_DIRTY)) {
-      //fprintf(stderr, "[bs] submit_write: buffer %d is not dirty. request first pbn(%d), total(%d)\n", 
-      //  buffer->pbn, request->buffers.front()->pbn, request->buffers.size());
+      //fprintf(stderr, "[bs] submit_write: buffer %d is not dirty. request first lbn(%d), total(%d)\n", 
+      //  buffer->lbn, request->buffers.front()->lbn, request->buffers.size());
     }
     assert(flag_marked(buffer, B_DIRTY));
 
@@ -99,8 +99,8 @@ void BlockStore::submit_write(const std::shared_ptr<IoRequest> &request, struct 
     iov[i].iov_len = opts.block_size;
     ++i;
 
-    //fprintf(stderr, "[bs] submit_write: set buffer %d into iovec first pbn(%d)\n", 
-    //    buffer->pbn, request->buffers.front()->pbn);
+    //fprintf(stderr, "[bs] submit_write: set buffer %d into iovec first lbn(%d)\n", 
+    //    buffer->lbn, request->buffers.front()->lbn);
   }
   
   io_prep_pwritev(iocb, fd, iov, iovcnt, offset);
@@ -118,7 +118,7 @@ void BlockStore::submit_write(const std::shared_ptr<IoRequest> &request, struct 
 
 void BlockStore::submit_read(const std::shared_ptr<IoRequest> &request, struct iocb *iocb) {
   uint32_t iovcnt = request->buffers.size();
-  uint32_t offset = request->buffers.front()->pbn * opts.block_size;
+  uint32_t offset = request->buffers.front()->lbn * opts.block_size;
   struct iovec iov[iovcnt];
   uint32_t i;
 
@@ -208,7 +208,7 @@ void BlockStore::reap_routine() {
 
       if (request->op == OP_WRITE) {
         //if (!request->post_complete_callback) {
-          //fprintf(stderr, "[bs] request(%d) has not registed callback\n", request->buffers.front()->pbn);
+          //fprintf(stderr, "[bs] request(%d) has not registed callback\n", request->buffers.front()->lbn);
         //}
         assert(request->post_complete_callback);
       }

@@ -50,14 +50,14 @@ class Buffer: NoCopy {
 
   void reset() {
     memset(buf, ' ', buffer_size);
-    pbn = 0;
+    lbn = 0;
     ref = 0;
     flags.reset();
   }
 
-  void init(pbn_t b) {
+  void init(lbn_t b) {
     reset();
-    pbn = b;
+    lbn = b;
     flags.mark(B_VALID);
   }
 
@@ -71,7 +71,7 @@ class Buffer: NoCopy {
 
   Flags<64> flags;
 
-  pbn_t pbn;                              // Physical block number
+  lbn_t lbn;                              // Physical block number
 
   uint32_t ref;
 
@@ -85,7 +85,7 @@ class BufferManager {
 
   BufferManager(BufferManagerOptions opts);
 
-  std::shared_ptr<Buffer> get_buffer(pbn_t b);
+  std::shared_ptr<Buffer> get_buffer(lbn_t b);
 
   void put_buffer(std::shared_ptr<Buffer> buffer);
   
@@ -96,12 +96,12 @@ class BufferManager {
   const BufferManagerOptions opts;
 
  private:
-  std::shared_ptr<Buffer> try_get_buffer(pbn_t b);
+  std::shared_ptr<Buffer> try_get_buffer(lbn_t b);
 
   void sync_write(std::shared_ptr<Buffer> buffer);
 
-  std::shared_ptr<Buffer> lookup_index(pbn_t pbn) {
-    auto p = index.find(pbn);
+  std::shared_ptr<Buffer> lookup_index(lbn_t lbn) {
+    auto p = index.find(lbn);
     if (p == index.end()) {
       return nullptr;
     }
@@ -130,28 +130,28 @@ class BufferManager {
   void free_list_push(std::shared_ptr<Buffer> buffer) {
     assert(buffer->ref == 0);
     for (auto p = free_list.begin(); p != free_list.end(); ++p) {
-      if (flag_marked(*p, B_VALID) && p->get()->pbn == buffer->pbn) {
+      if (flag_marked(*p, B_VALID) && p->get()->lbn == buffer->lbn) {
         assert(0);
       }
     }
-    //fprintf(stderr, " put buffer %d ref %d in the free list\n", buffer->pbn, buffer->ref);
+    //fprintf(stderr, " put buffer %d ref %d in the free list\n", buffer->lbn, buffer->ref);
     free_list.push_front(buffer);
     assert(free_list.size() <= opts.TOTAL_BUFFERS);
   }
 
-  void free_list_remove(pbn_t pbn) {
+  void free_list_remove(lbn_t lbn) {
     for (auto p = free_list.begin(); p != free_list.end(); ++p) {
-      if (flag_marked((*p), B_VALID) && (*p)->pbn == pbn) {
+      if (flag_marked((*p), B_VALID) && (*p)->lbn == lbn) {
         free_list.erase(p);
-        //fprintf(stderr, "REMOVE buffer(%d) from the freelist\n", pbn);
+        //fprintf(stderr, "REMOVE buffer(%d) from the freelist\n", lbn);
         return;
       }
     }
 
-    std::cerr << pbn << " not in the free list " << std::endl;
+    std::cerr << lbn << " not in the free list " << std::endl;
 
-    //free_list.remove_if([pbn](std::shared_ptr<Buffer> buf) {
-    //  return flag_marked(buf, B_VALID) && buf->pbn == pbn;
+    //free_list.remove_if([lbn](std::shared_ptr<Buffer> buf) {
+    //  return flag_marked(buf, B_VALID) && buf->lbn == lbn;
     //  });
   }
 
@@ -159,7 +159,7 @@ class BufferManager {
   std::mutex global_mutex;
 
   // TODO: need a better data structure
-  std::unordered_map<pbn_t, std::shared_ptr<Buffer>> index;
+  std::unordered_map<lbn_t, std::shared_ptr<Buffer>> index;
 
   // Store buffers that have ZERO reference. A buffer can be valid but with 0 references, meaning no body is using it.
   // the head is the newly added, recently used buffers, the tail is the least recently used buffers
