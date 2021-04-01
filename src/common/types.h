@@ -13,6 +13,7 @@ using op_t   = uint32_t;
 using hid_t  = uint64_t;        // Handle id
 using rid_t  = uint64_t;        // Request id
 using lbn_t  = uint32_t;        // Logical Block Number
+using off_t  = uint32_t;
 
 using LogBuffers = std::string;
 

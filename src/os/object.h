@@ -14,8 +14,8 @@ namespace morph {
 const uint32_t INVALID_EXTENT = std::numeric_limits<uint32_t>::max();
 
 struct Extent {
-  uint32_t start;  // The first logical block number
-  uint32_t end;    // The last logical block number (included)
+  off_t start;  // The first logical block number
+  off_t end;    // The last logical block number (included)
   lbn_t lbn;       // The mapped first physical block number
 
   MSGPACK_DEFINE_ARRAY(start, end, lbn);
@@ -56,7 +56,7 @@ class Object {
   // On failure, it returns false.
   //   If there is a extent whose start is greater than lbn, then ext is set to that extent.
   //   If not, then ext is going to be set as a INVALID_EXTENT.
-  bool search_extent(lbn_t lbn, Extent &ext);
+  bool search_extent(lbn_t lbn, Extent *ext);
 
   void insert_extent(lbn_t start, lbn_t end, lbn_t lbn) {
     extent_tree.emplace(end, Extent(start, end, lbn));

@@ -2,20 +2,23 @@
 
 namespace morph {
 
-bool Object::search_extent(lbn_t lbn, Extent &ext) {
+bool Object::search_extent(lbn_t lbn, Extent *ext) {
   std::vector<Extent> res;
   EXTENT_TREE_ITER iter;
-  lbn_t start;
-  lbn_t end;
+  lbn_t start, end;
   
   iter = extent_tree.lower_bound(lbn);
 
   if (iter == extent_tree.end()) {
-    ext.start = INVALID_EXTENT;
+    if (ext) {
+      ext->start = INVALID_EXTENT;
+    }
     return false;
   }
 
-  ext = iter->second;
+  if (ext) {
+    *ext = iter->second;
+  }
   return lbn >= iter->second.start && lbn <= iter->second.end;
 }
 

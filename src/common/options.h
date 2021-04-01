@@ -51,6 +51,9 @@ struct KvStoreOptions {
 struct ObjectStoreOptions {
   bool recover = false;
 
+  // When the write size is >= cow_data_size, use cow
+  uint32_t cow_data_size = 4096;
+
   BlockStoreOptions bso;
 
   BufferManagerOptions bmo;

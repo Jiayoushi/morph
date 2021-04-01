@@ -43,16 +43,28 @@ class ObjectStore {
   void object_write(std::shared_ptr<Object> object, const std::string &object_name, 
                     const uint32_t offset, const std::string &data);
 
-  std::shared_ptr<Buffer> get_block(std::shared_ptr<Object> object, lbn_t lbn, lbn_t lbn_end, 
-                                    bool create, uint32_t new_blocks);
+  void object_large_write(std::shared_ptr<Object> object, const std::string &object_name, 
+                            const uint32_t offset, const std::string &data);
+
+  void object_small_write(std::shared_ptr<Object> object, const std::string &object_name, 
+                            const uint32_t offset, const std::string &data);
+
+  std::shared_ptr<Buffer> get_block(std::shared_ptr<Object> object, lbn_t lbn, lbn_t lbn_end = 0, 
+                                    bool create = false, uint32_t new_blocks = 0);
 
   void write_buffer(const std::shared_ptr<Object> &objec, std::shared_ptr<Buffer> buffer, 
                     const char *data_ptr, uint32_t buf_offset, uint32_t size);
 
   std::shared_ptr<IoRequest> allocate_io_request(const std::shared_ptr<Object> owner, IoOperation op);
 
+  void wait_dirty_buffer(const std::shared_ptr<Buffer> &buffer);
+
+  void log_write(const std::shared_ptr<Object> &object, const std::string &object_name, 
+                 const std::shared_ptr<IoRequest> &request, const std::shared_ptr<Buffer> &buffer, 
+                 uint32_t offset, bool bitmap_modified);
+
   // Called by the kv_store after a write call is journaled
-  void post_log(std::shared_ptr<IoRequest> request) {
+  void post_log(const std::shared_ptr<IoRequest> &request) {
     //fprintf(stderr, "[os] post_log: let's fucking push request lbn(%d) op(%d)\n", 
     //  request->buffers.front()->lbn, request->op);
     block_store.push_request(request);
