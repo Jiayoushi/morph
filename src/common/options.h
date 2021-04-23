@@ -28,7 +28,7 @@ const uint8_t JOURNAL_TRANSACTION_SYNC_INTERVAL  = 1;
 
 struct BlockStoreOptions {
   bool recover = false;
-  uint32_t TOTAL_BLOCKS = 1024;
+  uint32_t TOTAL_BLOCKS = 10240;
   uint16_t block_size = 512;
   uint8_t ALLOCATE_RETRY = 3;
   uint32_t min_num_event = 1;
@@ -38,7 +38,7 @@ struct BlockStoreOptions {
 
 struct BufferManagerOptions {
   uint32_t TOTAL_BUFFERS = 1000;
-  uint16_t BUFFER_SIZE = 512;      // TODO: delete
+  uint16_t BUFFER_SIZE = 512;
 };
 
 struct KvStoreOptions {
@@ -52,7 +52,7 @@ struct ObjectStoreOptions {
   bool recover = false;
 
   // When the write size is >= cow_data_size, use cow
-  uint32_t cow_data_size = 4096;
+  uint32_t cow_data_size = 16384;
 
   BlockStoreOptions bso;
 

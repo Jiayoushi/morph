@@ -6,6 +6,7 @@
 #include <map>
 #include <iostream>
 #include <string.h>
+#include <common/utils.h>
 
 namespace morph {
 
@@ -27,20 +28,20 @@ BlockStore::BlockStore(BlockStoreOptions o):
 
   fd = open(opts.STORE_FILE.c_str(), oflag);
   if (fd < 0) {
-    perror("failed to open file to store buffers");
-    exit(EXIT_FAILURE);
+    perror("failed to open file to store data");
+    assert(0);
   }
 
   if (fallocate(fd, 0, 0, opts.block_size * opts.TOTAL_BLOCKS) < 0) {
     perror("failed to fallocate");
-    exit(EXIT_FAILURE);
+    assert(0);
   }
 
   int x;
   if ((x = io_setup(opts.max_num_event, &ioctx)) < 0) {
     std::cerr << "FAILED " << x << std::endl;
     perror("failed to do io_setup");
-    exit(EXIT_FAILURE);
+    assert(0);
   }
 
   bitmap = std::make_unique<Bitmap>(opts.TOTAL_BLOCKS, opts.ALLOCATE_RETRY);
@@ -57,13 +58,15 @@ BlockStore::~BlockStore() {
 
   if (close(fd) < 0) {
     perror("failed to close block store file");
-    exit(EXIT_FAILURE);
+    assert(0);
   }
 
   if (io_destroy(ioctx) < 0) {
     perror("failed to io_destory");
-    exit(EXIT_FAILURE);
+    assert(0);
   }
+
+  //fprintf(stderr, "block store exited\n");
 }
 
 // TODO: should these belong to the allocator class?
@@ -76,75 +79,90 @@ void BlockStore::free_blocks(lbn_t start_block, uint32_t count) {
   bitmap->free_blocks(start_block, count);
 }
 
-void BlockStore::push_request(std::shared_ptr<IoRequest> request) {
+void BlockStore::submit_request(IoRequest *request) {
   io_requests.push(request);
 }
 
-void BlockStore::submit_write(const std::shared_ptr<IoRequest> &request, struct iocb *iocb) {
-  uint32_t iovcnt = request->buffers.size();
+void BlockStore::submit_write(IoRequest *request, struct iocb *iocb) {
   uint32_t offset = request->buffers.front()->lbn * opts.block_size;
-  struct iovec iov[iovcnt];
-  uint32_t i;
   int ret;
 
-  i = 0;
-  for (const auto &buffer: request->buffers) {
+  for (Buffer *buffer: request->buffers) {
     if (!flag_marked(buffer, B_DIRTY)) {
-      //fprintf(stderr, "[bs] submit_write: buffer %d is not dirty. request first lbn(%d), total(%d)\n", 
-      //  buffer->lbn, request->buffers.front()->lbn, request->buffers.size());
+      if (++request->completed == request->buffers.size()) {
+        //fprintf(stderr, "request(%lu) is ready. exit now\n", request->get_id());
+        request->after_complete_callback();
+        request->notify_complete();
+        break;
+      }
+
+      offset += opts.block_size;
+      continue;
     }
-    assert(flag_marked(buffer, B_DIRTY));
 
-    iov[i].iov_base = buffer->buf;
-    iov[i].iov_len = opts.block_size;
-    ++i;
+    io_prep_pwrite(iocb, fd, buffer->buf, buffer->buffer_size, offset);
 
-    //fprintf(stderr, "[bs] submit_write: set buffer %d into iovec first lbn(%d)\n", 
-    //    buffer->lbn, request->buffers.front()->lbn);
+    iocb->data = request;
+
+    do {
+      // TODO: it's definitely better to submit more than 1 request, but somehow
+      //   submitting more than one request fails... Need to fix this so that
+      //   all these read requests are submitted in one call to io_submit.
+      ret = io_submit(ioctx, 1, &iocb);
+      if (ret < 0) {
+        if (ret == -EAGAIN) {
+          std::this_thread::sleep_for(std::chrono::seconds(1));
+          continue;
+        }
+        fprintf(stderr, "io_submit write failed %d\n", ret);
+        assert(0);
+      } else if (ret == 0) {
+        perror("io_submit write failed to submit even 1 event");
+        assert(0);
+      }
+    } while (ret != 1); 
+    
+    ++num_in_progress;
+    offset += opts.block_size;
   }
-  
-  io_prep_pwritev(iocb, fd, iov, iovcnt, offset);
-  iocb->data = request.get();
 
-  ret = io_submit(ioctx, 1, &iocb);
-  if (ret < 0) {
-    perror("io_submit failed");
-    exit(EXIT_FAILURE);
-  } else if (ret == 0) {
-    perror("io_submit failed to submit even 1 event");
-    exit(EXIT_FAILURE);
-  }
+  //fprintf(stderr, "io_submit write req(%lu) done\n\n",
+  //  request->get_id());
 }
 
-void BlockStore::submit_read(const std::shared_ptr<IoRequest> &request, struct iocb *iocb) {
-  uint32_t iovcnt = request->buffers.size();
+void BlockStore::submit_read(IoRequest *request, struct iocb *iocb) {
   uint32_t offset = request->buffers.front()->lbn * opts.block_size;
-  struct iovec iov[iovcnt];
-  uint32_t i;
+  int ret;
 
-  i = 0;
-  for (const auto &buffer: request->buffers) {
+  for (Buffer *buffer: request->buffers) {
     assert(!flag_marked(buffer, B_UPTODATE));
 
-    iov[i].iov_base = buffer->buf;
-    iov[i].iov_len = opts.block_size;
-    ++i;
-  }
-  
-  io_prep_preadv(iocb, fd, iov, iovcnt, offset);
-  iocb->data = request.get();
+    io_prep_pread(iocb, fd, buffer->buf, buffer->buffer_size, offset);
 
-  if (io_submit(ioctx, 1, &iocb) < 0) {
-    perror("io_submit failed");
-    exit(EXIT_FAILURE);
+    iocb->data = request;
+
+    ret = io_submit(ioctx, 1, &iocb);
+
+    if (ret < 0) {
+      perror("io_submit read failed");
+      assert(0);
+    } else if (ret == 0) {
+      perror("io_submit read failed to submit even 1 event");
+      assert(0);
+    }
+
+    ++num_in_progress;
+    offset += opts.block_size;
   }
+
+  //fprintf(stderr, "io_submit read done\n");
 }
 
 // TODO: right now, the io is submitted once for each io_request
 //       this could be slow. But for some reason, submitting multiple
 //       io does not work. Need to fix it later.
 void BlockStore::submit_routine() {
-  std::shared_ptr<IoRequest> request;
+  IoRequest *request;
   struct iocb *iocb;
   
   iocb = (struct iocb *)malloc(sizeof(struct iocb));
@@ -157,8 +175,6 @@ void BlockStore::submit_routine() {
       break;
     }
 
-    assert(request->status == IO_IN_PROGRESS);
-
     if (request->op == OP_WRITE) {
       submit_write(request, iocb);
     } else if (request->op == OP_READ) {
@@ -166,9 +182,9 @@ void BlockStore::submit_routine() {
     } else {
       assert(0);
     }
-
-    ++num_in_progress;
   }
+
+  free(iocb);
 }
 
 void BlockStore::reap_routine() {
@@ -177,6 +193,7 @@ void BlockStore::reap_routine() {
   struct timespec timeout;
   IoRequest *request;
   int num_events;
+  int error_code;
 
   events = (struct io_event *)malloc(sizeof(struct io_event) * opts.max_num_event);
   timeout.tv_sec = 0;
@@ -192,49 +209,57 @@ void BlockStore::reap_routine() {
       }
     }
 
+    //fprintf(stderr, "enter io_getevents\n");
     num_events = io_getevents(ioctx, opts.min_num_event, opts.max_num_event, events, &timeout);
+    //fprintf(stderr, "leave io_getevents\n");
 
     if (num_events < 0) {
-      perror("io_getevents failed");
-      exit(EXIT_FAILURE);
+      if (num_events == -EINTR) {
+        assert(0);
+        continue;
+      } else {
+        std::cerr << "io_getevents failed" << std::endl;
+        assert(0);
+      }
     } else if (num_events == 0) {
+      //fprintf(stderr, "[bs] 0 events reaped. num_in_progress=%d\n",
+      //  num_in_progress.load());
       continue;
     }
+    //fprintf(stderr, "[bs] num_events[%d] num_in_progress=%lu\n", num_events, num_in_progress.load());
 
     for (uint32_t i = 0; i < num_events; ++i) {
       event = events[i];
+      request = (IoRequest *)event.data;
+      assert(event.res == request->buffers.front()->buffer_size);
 
-      request = static_cast<IoRequest *>(event.data);
-
-      if (request->op == OP_WRITE) {
-        //if (!request->post_complete_callback) {
-          //fprintf(stderr, "[bs] request(%d) has not registed callback\n", request->buffers.front()->lbn);
-        //}
-        assert(request->post_complete_callback);
+      if (++request->completed == request->buffers.size()) {
+        //fprintf(stderr, "[bs] req(%lu) is done, going to call callbacks\n", request->get_id());
+        request->after_complete_callback();
       }
-
-      if (request->post_complete_callback) {
-        request->post_complete_callback();
-      }
-      request->signal_complete();
     }
 
     num_in_progress -= num_events;
+    //fprintf(stderr, "[bs] reap %d  left %d\n", num_events, num_in_progress.load());
   }
+
+  free(events);
 }
-
-
 
 void BlockStore::stop() {
   while (!io_requests.empty()) {
-    std::this_thread::yield();
+    //fprintf(stderr, "[bs] io_requests is not empty, waiting...\n");
+    std::this_thread::sleep_for(std::chrono::seconds(1));
   }
+  //fprintf(stderr, "[bs] io_requests are all done, exit...\n");
 
   io_requests.push(nullptr);
   submit_thread->join();
+  //fprintf(stderr, "[bs] submit_thread joined\n");
 
   running = false;
   reap_thread->join();
+  //fprintf(stderr, "[bs] reap_thread joined\n");
 
   assert(num_in_progress == 0);
   assert(io_requests.empty());

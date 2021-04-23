@@ -3,6 +3,7 @@
 
 #include <string>
 #include <thread>
+#include <future>
 #include <list>
 #include <condition_variable>
 #include <rocksdb/db.h>
@@ -27,8 +28,8 @@ struct Log {
 
   std::string value;
 
-  Log(LogType t, std::string &&k, std::string &&v):
-    key(std::move(k)),
+  Log(LogType t, const std::string &k, std::string &&v):
+    key(k),
     value(std::move(v)),
     type(t)
   {}
@@ -50,7 +51,7 @@ struct LogHandle {
     transaction(txn)
   {}
 
-  void log(LogType type, std::string &&key, std::string &&data) {
+  void log(LogType type, const std::string &key, std::string &&data) {
     // First check if there is any duplicate keys
     // If there is, then the latter log should overwrite the
     // previous one
@@ -61,7 +62,7 @@ struct LogHandle {
       }
     }
 
-    logs.emplace_back(type, std::move(key), std::move(data));
+    logs.emplace_back(type, key, std::move(data));
   }
 };
 
@@ -81,11 +82,14 @@ class Transaction {
 
   Transaction(uint32_t i):
     handle_credit(MAX_HANDLE),
-    open_txns(0),
+    open_handles(0),
     id(i)
   {}
 
   void assign_handle(std::shared_ptr<LogHandle> handle) {
+    //fprintf(stderr, "[kv] attempt to assign handle to txn %lu\n",
+    //  handle->transaction->id);
+
     assert(!flags.marked(TXN_CLOSED));
     assert(!flags.marked(TXN_COMPLETE));
     assert(handle_credit != 0);
@@ -94,16 +98,15 @@ class Transaction {
       flags.mark(TXN_CLOSED);
     }
 
-    open_txns++;
+    open_handles++;
 
-    std::lock_guard<std::mutex> lock(mutex);
     handles.push_back(handle);
   }
 
   void close_handle(std::shared_ptr<LogHandle> handle) {
-    open_txns--;
+    open_handles--;
 
-    if (flags.marked(TXN_CLOSED) && open_txns == 0) {
+    if (flags.marked(TXN_CLOSED) && open_handles == 0) {
       flags.mark(TXN_COMPLETE);
     }
   }
@@ -122,9 +125,9 @@ class Transaction {
 
   std::atomic<uint32_t> handle_credit;
 
-  std::atomic<uint32_t> open_txns;
+  std::atomic<uint32_t> open_handles;
 
-  const uint32_t id;
+  const uint64_t id;
 };
 
 enum CF_INDEX {
@@ -145,42 +148,27 @@ class KvStore {
   std::shared_ptr<LogHandle> start_transaction() {
     std::shared_ptr<LogHandle> handle;
 
+    //fprintf(stderr, "[kv] start_txn try to lock\n");
     std::lock_guard<std::mutex> lock(mutex);
+    //fprintf(stderr, "[kv] start_txn got lock\n");
 
     handle = std::make_shared<LogHandle>(open_txn);
+
+    assert(open_txn != nullptr);
+
     open_txn->assign_handle(handle);
 
     if (flag_marked(open_txn, TXN_CLOSED)) {
       closed_txns.push(open_txn);
-      open_txn = get_transaction();
+      open_txn = get_new_transaction();
     }
 
+    //fprintf(stderr, "[kv] start_txn exit\n");
     return handle;
   }
 
   void end_transaction(std::shared_ptr<LogHandle> handle) {
     handle->transaction->close_handle(handle);
-  }
-
-  // When there are writes to the same buffer, the second write needs to wait for the first
-  // The first guess the first write is still in the open transaction, so it wants the
-  // open transaction to be closed immediately, even though the previous write might be in a
-  // closed transaction.
-  void force_close_open_txn() {
-    std::lock_guard<std::mutex> lock(mutex);
-
-    if (!open_txn->has_handles()) {
-      return;
-    }
-
-    //fprintf(stderr, "FORCE CLOSE THIS SHIT\n");
-
-    flag_mark(open_txn, TXN_CLOSED);
-    if (open_txn->open_txns == 0) {
-      flag_mark(open_txn, TXN_COMPLETE);
-    }
-    closed_txns.push(open_txn);
-    open_txn = get_transaction();
   }
 
   void stop();
@@ -202,13 +190,16 @@ class KvStore {
     return handles[type];
   }
 
+
   void flush_routine();
 
   void write_routine();
 
-  std::unique_ptr<Transaction> get_transaction() {
-    std::unique_ptr<Transaction> txn;
-    txn = std::make_unique<Transaction>(transaction_id++);
+  void close_routine();
+
+  std::shared_ptr<Transaction> get_new_transaction() {
+    std::shared_ptr<Transaction> txn;
+    txn = std::make_shared<Transaction>(transaction_id++);
     return txn;
   }
 
@@ -229,12 +220,14 @@ class KvStore {
 
   rocksdb::DB *db;
 
-
   std::atomic<bool> running;
 
   std::unique_ptr<std::thread> flush_thread;
 
   std::unique_ptr<std::thread> write_thread;
+
+  // Responsible for closing a transaction every X seconds.
+  std::unique_ptr<std::thread> close_thread;
 };
 
 

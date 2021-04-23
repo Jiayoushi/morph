@@ -8,96 +8,113 @@
 #include <unordered_map>
 #include <os/buffer.h>
 #include <os/block_store.h>
+#include <rpc/msgpack.hpp>
 
 namespace morph {
 
 const uint32_t INVALID_EXTENT = std::numeric_limits<uint32_t>::max();
 
 struct Extent {
-  off_t start;  // The first logical block number
-  off_t end;    // The last logical block number (included)
-  lbn_t lbn;       // The mapped first physical block number
+  /*
+   * The offset of the starting block.
+   * It can be 7th block, or 155th block, ... 
+   * Note it's always block aligned.
+   */  
+  off_t off_start;
 
-  MSGPACK_DEFINE_ARRAY(start, end, lbn);
+  off_t off_end;    // The offset of the ending block
+
+  lbn_t lbn;             // The mapped first logical block number
+
+  MSGPACK_DEFINE_ARRAY(off_start, off_end, lbn);
 
   Extent():
-    start(INVALID_EXTENT)
+    off_start(INVALID_EXTENT)
   {}
 
-  Extent(lbn_t lstart, lbn_t lend, lbn_t pstart):
-    start(lstart),
-    end(lend),
-    lbn(pstart) {
-    assert(lstart != INVALID_EXTENT);
+  Extent(off_t s_off, off_t e_off, lbn_t logical_start):
+    off_start(s_off),
+    off_end(e_off),
+    lbn(logical_start) {
+    assert(s_off != INVALID_EXTENT);
   }
 
   bool valid() {
-    return start != INVALID_EXTENT;
+    return off_start != INVALID_EXTENT;
   }
 
   bool operator==(const Extent &rhs) const {
     return memcmp(this, &rhs, sizeof(Extent)) == 0;
+  }
+
+  lbn_t compute_lbn(off_t off) {
+    assert(off >= off_start && off <= off_end);
+    return lbn + off - off_start;
   }
 };
 
 
 class Object {
  public:
-  using EXTENT_TREE_ITER = std::map<lbn_t, Extent>::iterator ;
+  using EXTENT_TREE_ITER = std::map<lbn_t, Extent>::iterator;
 
-  Object():
-    w_cnt(0),
-    r_cnt(0),
+  Object() = delete;
+
+  Object(const std::string &name):
+    name(name),
     size(0)
   {}
 
 
+  // TODO: the interface is really garbage. really need to change it.
   // On sucess, it returns true. ext is set to the extent that contains the lbn
   // On failure, it returns false.
   //   If there is a extent whose start is greater than lbn, then ext is set to that extent.
   //   If not, then ext is going to be set as a INVALID_EXTENT.
-  bool search_extent(lbn_t lbn, Extent *ext);
+  bool search_extent(off_t off, Extent *ext);
 
-  void insert_extent(lbn_t start, lbn_t end, lbn_t lbn) {
+  // Get the pointer to the extent that covers the logical block "lbn".
+  //
+  // Return:
+  //   On success, returns the pointer.
+  //   On failure, returns nullptr.
+  Extent *get_extent(off_t off) {
+    auto iter = extent_tree.lower_bound(off);
+    if (iter != extent_tree.end()) {
+      return &iter->second;
+    } else {
+      return nullptr;
+    }
+  }
+
+  void insert_extent(off_t start, off_t end, lbn_t lbn) {
     extent_tree.emplace(end, Extent(start, end, lbn));
   }
 
-  void record_request(const std::shared_ptr<IoRequest> req) {
-    std::lock_guard<std::mutex> lock(pw_mutex);
-    assert(pending_writes.find(req->buffers.front()->lbn) == pending_writes.end());
-    pending_writes.emplace(std::make_pair(req->buffers.front()->lbn, req));
+  std::vector<std::pair<lbn_t, uint32_t>> delete_extent_range(off_t start, 
+      off_t end);
+
+  std::string get_name() const {
+    return name;
   }
 
-  void remove_request(const std::shared_ptr<IoRequest> req) {
-    std::lock_guard<std::mutex> lock(pw_mutex);
-    pending_writes.erase(req->buffers.front()->lbn);
-  }
-
-  MSGPACK_DEFINE_ARRAY(extent_tree);
+  MSGPACK_DEFINE_ARRAY(name, extent_tree);
 
  private:
   friend class ObjectStore;
 
-  std::atomic<uint32_t> w_cnt;
-  std::atomic<uint32_t> r_cnt;
+  std::string name;
 
-  // mutex for read and write operations
+  // Ensure thread-safty of 
+  //   read
+  //   write
   std::mutex mutex;
-
-  // mutex for the pending writes data structure below
-  std::mutex pw_mutex;
-
-  // a list of write requests to keep shared_ptr of write requests alive after aio is submitted
-  // the key is the first physical block number of the buffers
-  // TODO: we probably don't need this? As IoRequest is kept alive by the std::bind?
-  std::unordered_map<lbn_t, std::shared_ptr<IoRequest>> pending_writes;
 
   // TODO: not used yet
   uint32_t size;
 
-  // The metadata is entirely in memory, so we don't use direct extents here. Just a red black tree.
-  // The tree is sorted by the the last logical block number covered by the extent
-  std::map<lbn_t, Extent> extent_tree;
+  // Sorted by the the last logical block offset covered by the extent
+  std::map<off_t, Extent> extent_tree;
 };
 
 }

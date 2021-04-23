@@ -6,9 +6,9 @@
 
 namespace morph {
 
-void Buffer::copy_data(const char *data, uint32_t buf_offset, uint32_t data_offset, uint32_t size) {
+void Buffer::copy_data(const char *data, uint32_t buf_offset, 
+    uint32_t data_offset, uint32_t size) {
   std::lock_guard<std::mutex> lock(mutex);
-
   memcpy(buf + buf_offset, data + data_offset, size);
 }
 
@@ -16,15 +16,23 @@ BufferManager::BufferManager():
     BufferManager(BufferManagerOptions())
 {}
 
-BufferManager::BufferManager(BufferManagerOptions o):
-    opts(o) {
-  for (uint32_t i = 0; i < opts.TOTAL_BUFFERS; ++i) {
-    free_list.push_back(std::make_shared<Buffer>(opts.BUFFER_SIZE));
+BufferManager::~BufferManager() {
+  assert(free_list.size() == opts.TOTAL_BUFFERS);
+
+  for (Buffer *buffer: free_list) {
+    delete buffer;
   }
 }
 
-std::shared_ptr<Buffer> BufferManager::get_buffer(lbn_t lbn) {
-  std::shared_ptr<Buffer> buffer;
+BufferManager::BufferManager(BufferManagerOptions o):
+    opts(o) {
+  for (uint32_t i = 0; i < opts.TOTAL_BUFFERS; ++i) {
+    free_list.push_back(new Buffer(opts.BUFFER_SIZE));
+  }
+}
+
+Buffer * BufferManager::get_buffer(lbn_t lbn) {
+  Buffer * buffer;
 
   while (true) {
     buffer = try_get_buffer(lbn);
@@ -42,8 +50,8 @@ std::shared_ptr<Buffer> BufferManager::get_buffer(lbn_t lbn) {
   return buffer;
 }
 
-std::shared_ptr<Buffer> BufferManager::try_get_buffer(lbn_t lbn) {
-  std::shared_ptr<Buffer> buffer;
+Buffer * BufferManager::try_get_buffer(lbn_t lbn) {
+  Buffer * buffer;
   std::lock_guard<std::mutex> lock(global_mutex);
 
   buffer = lookup_index(lbn);
@@ -77,14 +85,15 @@ std::shared_ptr<Buffer> BufferManager::try_get_buffer(lbn_t lbn) {
 
   ++buffer->ref;
 
-
   return buffer;
 }
 
-void BufferManager::put_buffer(std::shared_ptr<Buffer> buffer) {
+void BufferManager::put_buffer(Buffer * buffer) {
   std::lock_guard<std::mutex> lock(global_mutex);
 
   assert(buffer != nullptr);
+
+  uint32_t before = buffer->ref;
 
   --buffer->ref;
   if (buffer->ref == 0) {

@@ -61,6 +61,20 @@ bool flag_marked(const std::shared_ptr<T> &t, uint32_t fg) {
   return t->flags.bits.load()[fg] == 1;
 }
 
+template <typename T>
+bool flag_marked(const T *t, uint32_t fg) {
+  return t->flags.bits.load()[fg] == 1;
+}
+
+template <typename T>
+void flag_mark(T *t, uint32_t fg) {
+  t->flags.bits.store(t->flags.bits.load().set(fg));
+}
+
+template <typename T>
+void flag_unmark(T *t, uint32_t fg) {
+  t->flags.bits.store(t->flags.bits.load().reset(fg));
+}
 
 }
 

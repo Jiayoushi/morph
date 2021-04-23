@@ -28,6 +28,10 @@ enum BUFFER_FLAG {
 
   // An unaligned buffer does not need to read from disk, if the buffer is B_NEW
   B_NEW = 4,
+
+  B_WRITE_PENDING = 5,
+
+  B_READ_PENDING = 6,
 };
 
 class Buffer: NoCopy {
@@ -67,8 +71,6 @@ class Buffer: NoCopy {
 
   std::mutex mutex;
 
-  std::condition_variable write_complete;
-
   Flags<64> flags;
 
   lbn_t lbn;                              // Physical block number
@@ -83,24 +85,22 @@ class BufferManager {
  public:
   BufferManager();
 
+  ~BufferManager();
+
   BufferManager(BufferManagerOptions opts);
 
-  std::shared_ptr<Buffer> get_buffer(lbn_t b);
+  Buffer * get_buffer(lbn_t b);
 
-  void put_buffer(std::shared_ptr<Buffer> buffer);
-  
-  uint32_t free_buffer_count() const {
-    return free_list.size();
-  }
+  void put_buffer(Buffer *buffer);
 
   const BufferManagerOptions opts;
 
  private:
-  std::shared_ptr<Buffer> try_get_buffer(lbn_t b);
+  Buffer * try_get_buffer(lbn_t b);
 
-  void sync_write(std::shared_ptr<Buffer> buffer);
+  void sync_write(Buffer * buffer);
 
-  std::shared_ptr<Buffer> lookup_index(lbn_t lbn) {
+  Buffer * lookup_index(lbn_t lbn) {
     auto p = index.find(lbn);
     if (p == index.end()) {
       return nullptr;
@@ -108,8 +108,8 @@ class BufferManager {
     return p->second;
   }
 
-  std::shared_ptr<Buffer> free_list_pop() {
-    std::shared_ptr<Buffer> buffer;
+  Buffer * free_list_pop() {
+    Buffer * buffer;
   
     assert(!free_list.empty());
 
@@ -127,10 +127,10 @@ class BufferManager {
     return nullptr;
   }
 
-  void free_list_push(std::shared_ptr<Buffer> buffer) {
+  void free_list_push(Buffer *buffer) {
     assert(buffer->ref == 0);
     for (auto p = free_list.begin(); p != free_list.end(); ++p) {
-      if (flag_marked(*p, B_VALID) && p->get()->lbn == buffer->lbn) {
+      if (flag_marked(*p, B_VALID) && (*p)->lbn == buffer->lbn) {
         assert(0);
       }
     }
@@ -150,7 +150,7 @@ class BufferManager {
 
     std::cerr << lbn << " not in the free list " << std::endl;
 
-    //free_list.remove_if([lbn](std::shared_ptr<Buffer> buf) {
+    //free_list.remove_if([lbn](Buffer * buf) {
     //  return flag_marked(buf, B_VALID) && buf->lbn == lbn;
     //  });
   }
@@ -159,12 +159,14 @@ class BufferManager {
   std::mutex global_mutex;
 
   // TODO: need a better data structure
-  std::unordered_map<lbn_t, std::shared_ptr<Buffer>> index;
+  std::unordered_map<lbn_t, Buffer *> index;
 
   // Store buffers that have ZERO reference. A buffer can be valid but with 0 references, meaning no body is using it.
   // the head is the newly added, recently used buffers, the tail is the least recently used buffers
-  std::list<std::shared_ptr<Buffer>> free_list;
+  std::list<Buffer *> free_list;
 
+  // Called after read or write is completed
+  std::function<void()> after_io_callback;
 };
 
 }

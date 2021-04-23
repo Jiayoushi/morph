@@ -37,7 +37,7 @@ add_executable(block_store_test
   src/os/block_allocator.cc
   src/os/block_store.cc
   src/os/buffer.cc
-  src/tests/os/block_store.cc)
+  src/tests/os/block_store_test.cc)
 add_executable(object_store_test
   src/os/block_allocator.cc
   src/os/block_store.cc
@@ -45,7 +45,7 @@ add_executable(object_store_test
   src/os/kv_store.cc
   src/os/object.cc
   src/os/object_store.cc
-  src/tests/os/object_store.cc)
+  src/tests/os/object_store_test.cc)
 add_executable(third_party_test
   src/tests/third_party.cc)
 

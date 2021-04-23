@@ -27,9 +27,11 @@ class ObjectStore {
 
   ~ObjectStore();
 
-  int put_object(const std::string &object_name, const uint32_t offset, const std::string &body);
+  int put_object(const std::string &object_name, const uint32_t offset, 
+    const std::string &body);
 
-  int get_object(const std::string &object_name, std::string &buf, const uint32_t offset, const uint32_t size);
+  int get_object(const std::string &object_name, std::string &buf, 
+    const uint32_t offset, const uint32_t size);
 
   const ObjectStoreOptions opts;
 
@@ -40,55 +42,110 @@ class ObjectStore {
 
   std::shared_ptr<Object> allocate_object(const std::string &name);
 
-  void object_write(std::shared_ptr<Object> object, const std::string &object_name, 
-                    const uint32_t offset, const std::string &data);
+  void object_write(std::shared_ptr<Object> object, 
+    const std::string &object_name, const uint32_t offset, 
+    const std::string &data);
 
-  void object_large_write(std::shared_ptr<Object> object, const std::string &object_name, 
-                            const uint32_t offset, const std::string &data);
+  void object_large_write(std::shared_ptr<Object> object, 
+    const std::string &object_name, const uint32_t offset, 
+    const std::string &data);
 
-  void object_small_write(std::shared_ptr<Object> object, const std::string &object_name, 
-                            const uint32_t offset, const std::string &data);
+  void object_small_write(std::shared_ptr<Object> object, 
+    const std::string &object_name, const uint32_t offset, 
+    const std::string &data);
 
-  std::shared_ptr<Buffer> get_block(std::shared_ptr<Object> object, lbn_t lbn, lbn_t lbn_end = 0, 
-                                    bool create = false, uint32_t new_blocks = 0);
+  Buffer * get_block(std::shared_ptr<Object> object, lbn_t lbn, 
+    lbn_t lbn_end = 0, bool create = false, uint32_t new_blocks = 0);
 
-  void write_buffer(const std::shared_ptr<Object> &objec, std::shared_ptr<Buffer> buffer, 
-                    const char *data_ptr, uint32_t buf_offset, uint32_t size);
+  /*
+   * Copies the data in "data_ptr" to buffer.
+   * 
+   * params:
+   *   buf_offset: the offset of the buffer to be copied. Note it's not the start of data_ptr.
+   *   size: the number of bytes to copy.
+   * 
+   * return: 
+   *   how many bytes are copied to the buffer.
+   */
+  uint32_t write_buffer(const std::shared_ptr<Object> &object, 
+      Buffer * buffer, const char *data_ptr, 
+      uint32_t buf_offset, uint32_t size, bool set_flags = true);
 
-  std::shared_ptr<IoRequest> allocate_io_request(const std::shared_ptr<Object> owner, IoOperation op);
 
-  void wait_dirty_buffer(const std::shared_ptr<Buffer> &buffer);
+  /*
+   * Copies the data from block located at "file_off" to "new_buffer".
+   */
+  size_t cow_write_buffer(const std::shared_ptr<Object> &object,
+      const off_t file_off, Buffer *new_buffer,
+      off_t buf_off, size_t write_size, const char *data_ptr);
 
-  void log_write(const std::shared_ptr<Object> &object, const std::string &object_name, 
-                 const std::shared_ptr<IoRequest> &request, const std::shared_ptr<Buffer> &buffer, 
-                 uint32_t offset, bool bitmap_modified);
+  void log_write(const std::shared_ptr<Object> &object, 
+    const std::string &object_name, IoRequest *request, 
+    std::string data, uint32_t offset, bool bitmap_modified);
+
+  void persist_metadata();
 
   // Called by the kv_store after a write call is journaled
-  void post_log(const std::shared_ptr<IoRequest> &request) {
-    //fprintf(stderr, "[os] post_log: let's fucking push request lbn(%d) op(%d)\n", 
-    //  request->buffers.front()->lbn, request->op);
-    block_store.push_request(request);
+  void post_log(IoRequest *request) {
+    //fprintf(stderr, "[os] submitting write request(%lu)\n", 
+    //  request->get_id());
+    block_store.submit_request(request);
   }
 
-  void post_write(const std::shared_ptr<Object> owner, const std::shared_ptr<IoRequest> &request);
+  void after_write(const std::shared_ptr<Object> &object, 
+    IoRequest *request, bool finished);
 
-  void post_read(const std::shared_ptr<IoRequest> &request) {
-    //fprintf(stderr, "post read called for %d\n", request->buffers.front()->lbn);
-    for (const std::shared_ptr<Buffer> &buffer: request->buffers) {
-      flag_mark(buffer, B_UPTODATE);
-    }
-  }
+  void after_read(IoRequest *request, bool finished);
 
-  void read_buffer(const std::shared_ptr<Object> &object, std::shared_ptr<Buffer> buffer);
+  void read_buffer(const std::shared_ptr<Object> &object, 
+    Buffer *buffer);
 
   // Read the metadata and replay the data log after restart or crash
   void recover();
 
+  uint64_t assign_request_id() {
+    return request_id++;
+  }
+
   // 0000000....00145-object_sara-138
-  std::string get_data_key(uint32_t transaction_id, const std::string &object_name, uint32_t offset) {
+  std::string get_data_key(uint32_t transaction_id, const std::string &object_name, 
+      uint32_t offset) {
     char buf[512];
     sprintf(buf, "%032d-%s-%u", transaction_id, object_name.c_str(), offset);
     return std::string(buf);
+  }
+
+  bool is_block_aligned(uint32_t addr) const {
+    return addr % opts.bso.block_size == 0;
+  }
+
+  bool has_pending_operations() const {
+    //fprintf(stderr, "unfished_writes %u reads %u\n",
+    //  unfinished_writes.load(), unfinished_reads.load());
+    return unfinished_writes > 0 || unfinished_reads > 0;
+  }
+
+  IoRequest *start_request(IoOperation operation) {
+    IoRequest *request = new IoRequest(assign_request_id(), operation);
+    
+    assert(operation == OP_READ || operation == OP_WRITE);
+
+    if (operation == OP_READ) {
+      ++unfinished_reads;
+    } else {
+      ++unfinished_writes;
+    }
+
+    return request;
+  }
+
+  void end_request(IoRequest *request) {
+    if (request->op == OP_READ) {
+      --unfinished_reads;
+    } else {
+      --unfinished_writes;
+    }
+    delete request;
   }
 
   std::atomic<bool> running;
@@ -107,10 +164,11 @@ class ObjectStore {
 
   uint32_t id;
 
-  // TODO: for testing only, need to be removed later.
-  std::atomic<uint32_t> w_count;
+  std::atomic<uint32_t> unfinished_writes;
 
-  std::atomic<uint32_t> r_count;
+  std::atomic<uint32_t> unfinished_reads;
+
+  uint64_t request_id;
 };
 
 }

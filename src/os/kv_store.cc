@@ -24,11 +24,13 @@ KvStore::KvStore(KvStoreOptions opt):
 
   Transaction::MAX_HANDLE = opts.MAX_TXN_HANDLES;
 
-  open_txn = get_transaction();
+  open_txn = get_new_transaction();
 
   write_thread = std::make_unique<std::thread>(&KvStore::write_routine, this);
 
   flush_thread = std::make_unique<std::thread>(&KvStore::flush_routine, this);
+
+  close_thread = std::make_unique<std::thread>(&KvStore::close_routine, this);
 }
 
 void KvStore::init_db(const bool recovery) {
@@ -107,6 +109,7 @@ void KvStore::write_routine() {
   Status s;
   std::shared_ptr<Transaction> transaction;
   WriteBatch batch;
+  uint64_t next_expected_txn = 0;
 
   while (true) {
     if (closed_txns.empty()) {
@@ -119,11 +122,19 @@ void KvStore::write_routine() {
     }
 
     if (!flag_marked(closed_txns.front(), TXN_COMPLETE)) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(500));
+      //fprintf(stderr, "txn(%lu) total(%lu) is not compelte, wait\n",
+      //  closed_txns.front()->id, closed_txns.size());
+      std::this_thread::sleep_for(std::chrono::seconds(1));
       continue;
     }
 
     transaction = closed_txns.pop();
+
+    if (transaction->id != next_expected_txn) {
+      //fprintf(stderr, "txn id %lu   expected %lu\n",
+      //  transaction->id, next_expected_txn);
+      assert(0);
+    }
 
     batch.Clear();
 
@@ -143,13 +154,15 @@ void KvStore::write_routine() {
       exit(EXIT_FAILURE);
     }
  
-    //fprintf(stderr, "[KV] TRANSACTION %d is written, it's time to call post_log_callback\n", transaction->id);
+    //fprintf(stderr, "[kv] TRANSACTION %d is written, it's time to call post_log_callback\n", transaction->id);
     for (const auto &handle: transaction->handles) {
       if (handle->post_log_callback) {
         handle->post_log_callback();
       }
     }
-    //fprintf(stderr, "[KV] TRANSACTION %d is written, callbacks are called\n", transaction->id);
+    transaction->handles.clear();
+    //fprintf(stderr, "[kv] TRANSACTION %d is written, callbacks are called\n", transaction->id);
+    ++next_expected_txn;
   }
 }
 
@@ -167,7 +180,35 @@ void KvStore::flush_routine() {
   }
 }
 
+void KvStore::close_routine() {
+	while (running) {
+		std::this_thread::sleep_for(std::chrono::seconds(1));
+
+		std::lock_guard<std::mutex> lock(mutex);
+
+    if (open_txn == nullptr) {
+      continue;
+    }
+
+		if (open_txn->has_handles()) {
+      //fprintf(stderr, "[kv] force close current open_txn %lu with %d handles\n",
+      //  open_txn->id,
+      //  opts.MAX_TXN_HANDLES - open_txn->handle_credit.load());
+			flag_mark(open_txn, TXN_CLOSED);
+      if (open_txn->open_handles == 0) {
+        flag_mark(open_txn, TXN_COMPLETE);
+      }
+			closed_txns.push(open_txn);
+			open_txn = get_new_transaction();
+		} else {
+      //fprintf(stderr, "[kv] open_txn has no handles\n");
+    }
+	}
+}
+
 void KvStore::stop() {
+  //fprintf(stderr, "kvstore is try to stop\n");
+
   {
     std::lock_guard<std::mutex> lock(mutex);
 
@@ -175,7 +216,7 @@ void KvStore::stop() {
       if (open_txn->has_handles()) {
         flag_mark(open_txn, TXN_CLOSED);
         closed_txns.push(open_txn);
-        if (open_txn->open_txns == 0) {
+        if (open_txn->open_handles == 0) {
           flag_mark(open_txn, TXN_COMPLETE);
         }
       }
@@ -185,6 +226,7 @@ void KvStore::stop() {
 
   running = false;
 
+  close_thread->join();
   write_thread->join();
   flush_thread->join();
 
@@ -195,9 +237,11 @@ void KvStore::stop() {
     exit(EXIT_FAILURE);
   }
 
-  assert(open_txn == nullptr);
   assert(closed_txns.empty());
   assert(written_txns == 0);
+  assert(open_txn == nullptr || !open_txn->has_handles());
+
+  //fprintf(stderr, "kvstore is stopped\n");
 }
 
 }

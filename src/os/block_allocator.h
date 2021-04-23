@@ -55,9 +55,7 @@ class Bitmap {
     return free_blocks_cnt;
   }
 
-
   std::string serialize();
-
 
   void deserialize(const std::string &v);
 

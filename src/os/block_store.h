@@ -20,65 +20,65 @@ namespace morph {
 
 class Buffer;
 
-
 enum IoOperation {
   OP_READ = 0,
   OP_WRITE = 1,
 };
 
-enum IoRequestStatus {
-  IO_IN_PROGRESS = 0,
-  IO_COMPLETED = 1            // We need this in case threads waiting on io_complete cv are woken up
-                              // while IO is not completed.
-};
 
-struct IoRequest {
-  std::list<std::shared_ptr<Buffer>> buffers;
+// Use this so we can call COW write's callback function
+// when all buffers are ready.
+class IoRequest: NoCopy {
+ public:
+  IoRequest() = delete;
+
+  IoRequest(uint64_t rid, IoOperation iop):
+    id(rid),
+    op(iop),
+    completed(0),
+    after_complete_callback(nullptr)
+  {}
+
+  void push_buffer(Buffer *buffer) {
+    buffers.push_back(buffer);
+  }
+
+  void wait_for_complete() {
+    std::unique_lock<std::mutex> lock(mutex);
+    complete_cv.wait(lock, [this]() {
+      return completed == buffers.size();
+   });
+  }
+
+  void notify_complete() {
+    std::unique_lock<std::mutex> lock(mutex);
+    complete_cv.notify_all();
+  }
+
+  uint64_t get_id() const {
+    return id;
+  }
 
   IoOperation op;
 
-  std::atomic<int> status;
+  std::list<Buffer *> buffers;
+
+  std::function<void()> after_complete_callback;
+
+ private:
+  friend class BlockStore;
+
+  const uint64_t id;
+
+
+  uint32_t completed;
 
   std::mutex mutex;
 
-  std::condition_variable io_complete;
-
-
-  // Called after the request is completed
-  std::function<void()> post_complete_callback;
-
-  IoRequest() = delete;
-
-  IoRequest(IoOperation o):
-    op(o),
-    status(IO_IN_PROGRESS)
-  {}
-
-  bool is_completed() {
-    return status.load() == IO_COMPLETED;
-  }
-
-  void signal_complete() {
-    std::unique_lock<std::mutex> lock(mutex);
-    status = IO_COMPLETED;
-    io_complete.notify_one();
-  }
-
-  void wait_for_completion() {
-    std::unique_lock<std::mutex> lock(mutex);
-    io_complete.wait(lock,
-      [this]() {
-        return this->status == IO_COMPLETED;
-      });
-  }
+  std::condition_variable complete_cv;
 };
 
 
-// TODO: it's possible that this buffer will become locked at some point?
-//       so it's better to use try lock. So a request will become half written and processed later.
-//       in that case we also need a ptr to point to the buffer that waits to be processed (not already processed)
-//
-// TODO: do i need O_SYNC? Or is it better to fsync once in a while and truncate txns in the kv_store accordingly?
 class BlockStore: NoCopy {
  public:
   BlockStore();
@@ -95,7 +95,7 @@ class BlockStore: NoCopy {
     return bitmap->free_blocks_count();
   }
 
-  void push_request(std::shared_ptr<IoRequest> request);
+  void submit_request(IoRequest *request);
 
 
   // TODO: this is gonna be slow if the entire bitmap is serialized everytime it's modified
@@ -113,17 +113,14 @@ class BlockStore: NoCopy {
 
   const BlockStoreOptions opts;
 
-
  private:
   void submit_routine();
 
-  void submit_write(const std::shared_ptr<IoRequest> &request, struct iocb *iocb);
+  void submit_write(IoRequest *request, struct iocb *iocb);
 
-  void submit_read(const std::shared_ptr<IoRequest> &request, struct iocb *iocb); 
+  void submit_read(IoRequest *request, struct iocb *iocb); 
 
   void reap_routine();
-
-  std::mutex rw;
 
   int fd;
 
@@ -137,7 +134,7 @@ class BlockStore: NoCopy {
   // Thread responsible of reaping the completed io
   std::unique_ptr<std::thread> reap_thread;
 
-  morph::BlockingQueue<std::shared_ptr<IoRequest>> io_requests;
+  morph::BlockingQueue<IoRequest *> io_requests;
 
   io_context_t ioctx;
 
