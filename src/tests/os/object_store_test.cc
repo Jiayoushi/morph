@@ -7,6 +7,14 @@ using morph::ObjectStoreOptions;
 using morph::get_garbage;
 using morph::delete_directory;
 
+// TODO: after each test, it is required to start a new instance
+//       and read from the disk to make sure the writes are actually
+//       written.
+
+// TODO: check the consistency when crash midway
+
+// TODO: check the integrity if data is corrupted
+
 struct ObjectUnit {
   std::string object_name;
   std::string content;
@@ -35,7 +43,7 @@ void object_random_read_write(ObjectStore &os, const std::string &name,
 
     os.put_object(name, off, send_buf);
 
-    os.get_object(name, get_buf, off, size);
+    os.get_object(name, &get_buf, off, size);
 
     ASSERT_EQ(get_buf, send_buf);
   }
@@ -48,7 +56,8 @@ void object_sequential_write(ObjectStore &os, const std::string &name,
   os.put_object(name, 0, "");
 
   for (uint32_t off = 0; off < content.size(); off += to_write) {
-    to_write = std::min(content.size() - off, (1ul + rand() % 1024));
+    to_write = std::min((uint32_t)(content.size() - off), 
+      (rand() % 100) + ObjectStoreOptions().cow_data_size / 2);
     std::string send_buf(content.c_str() + off, to_write);
 
     os.put_object(name, off, send_buf);
@@ -58,13 +67,14 @@ void object_sequential_write(ObjectStore &os, const std::string &name,
 void object_sequential_read(ObjectStore &os, const std::string &name, 
     const std::string &content) {
   uint32_t to_read;
+  uint32_t total_read = 0;
 
   for (uint32_t off = 0; off < content.size(); off += to_read) {
-    to_read = 512;
+    to_read = std::min(content.size() - off, 8096lu);
     std::string expect_buf(content.c_str() + off, to_read);
     std::string get_buf;
 
-    os.get_object(name, get_buf, off, to_read);
+    os.get_object(name, &get_buf, off, to_read);
     ASSERT_EQ(expect_buf, get_buf);
   }
 }
@@ -206,8 +216,6 @@ TEST(ObjectStoreTest, BasicLargeReadWrite) {
   object_random_read_write(os, "obj1", 20, 1000000, opts.cow_data_size);
 
   cleanup(opts.kso.ROCKSDB_FILE, opts.kso.WAL_DIR);
-  
-  fprintf(stderr, "reach the end of test function!\n");
 }
 
 
@@ -230,6 +238,7 @@ TEST(ObjectStoreTest, ConcurrentSmallReadWrite) {
   cleanup(opts.kso.ROCKSDB_FILE, opts.kso.WAL_DIR);
 }
 
+// TODO: the sequential read speed is so slow that this test take minutes...
 TEST(ObjectStoreTest, RecoverAfterSafeExit) {
   const uint32_t FILE_SIZE = 40960;
   std::vector<std::string> names;
@@ -268,9 +277,79 @@ TEST(ObjectStoreTest, RecoverAfterSafeExit) {
   cleanup(opts.kso.ROCKSDB_FILE, opts.kso.WAL_DIR);
 }
 
-// TODO: check the consistency when crash midway
+TEST(ObjectStoreTest, BasicObjectMetadataOperations) {
+  ObjectStore os(1);
+  int ret_val;
+  std::string buf;
 
-// TODO: check the integrity if data is corrupted
+  ret_val = os.put_object("obj", 0, "");
+  ASSERT_EQ(ret_val, 0);
+
+  ret_val = os.put_metadata("obj", "nice", "xx");
+  ASSERT_EQ(ret_val, 0);
+
+  ret_val = os.get_metadata("obj", "nice", &buf);
+  ASSERT_EQ(ret_val, 0);
+  ASSERT_EQ(buf, "xx");
+
+  ret_val = os.get_metadata("obj", "not_nice", &buf);
+  ASSERT_EQ(ret_val, morph::METADATA_NOT_FOUND);
+
+  ret_val = os.delete_metadata("obj", "nice");
+  ASSERT_EQ(ret_val, 0);
+
+  ret_val = os.get_metadata("obj", "nice", &buf);
+  ASSERT_EQ(ret_val, morph::METADATA_NOT_FOUND);
+
+  ret_val = os.delete_metadata("obj", "nice");
+  ASSERT_EQ(ret_val, 0);
+
+  ret_val = os.delete_metadata("obj", "not_nice");
+  ASSERT_EQ(ret_val, 0);
+
+  cleanup(ObjectStoreOptions().kso.ROCKSDB_FILE, 
+    ObjectStoreOptions().kso.WAL_DIR);
+}
+
+TEST(ObjectStoreTest, ConcurrentGetPutMetadata) {
+  const uint8_t NUM_THREADS = 10;
+  const uint8_t NUM_ATTRIBUTES = 100;
+  ObjectStore os(1);
+  std::vector<std::thread> threads;
+
+  for (uint8_t t = 0; t < NUM_THREADS; ++t) {
+    threads.push_back(std::thread([&os, t]() {
+      const std::string object_name = "obj" + std::to_string(t);
+      std::string attribute("", 32);
+      std::string value("", 32);
+      std::string buf;
+      int ret_val;
+
+      ret_val = os.put_object(object_name, 0, "");
+      ASSERT_EQ(ret_val, 0);
+      
+      for (uint32_t i = 0; i < NUM_ATTRIBUTES; ++i) {
+        get_garbage(attribute);
+        get_garbage(value);
+
+        ret_val = os.put_metadata(object_name, attribute, value);
+        ASSERT_EQ(ret_val, 0);
+
+        ret_val = os.get_metadata(object_name, attribute, &buf);
+        ASSERT_EQ(ret_val, 0);
+        
+        ASSERT_EQ(value, buf);
+      }
+    }));
+  }
+
+  for (auto &t: threads) {
+    t.join();
+  }
+
+  cleanup(ObjectStoreOptions().kso.ROCKSDB_FILE, 
+    ObjectStoreOptions().kso.WAL_DIR);
+}
 
 int main(int argc, char *argv[]) {
   ::testing::InitGoogleTest(&argc, argv);

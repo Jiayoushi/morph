@@ -16,6 +16,7 @@ ObjectStore::ObjectStore(uint32_t idp, ObjectStoreOptions oso):
     unfinished_reads(0),
     running(true),
     request_id(0) {
+
   try {
     std::string filepath = LOGGING_DIRECTORY + "/oss_" + std::to_string(idp);
     logger = spdlog::basic_logger_mt("oss_" + std::to_string(idp) + 
@@ -61,7 +62,8 @@ void ObjectStore::recover() {
   block_store.deserialize_bitmap(bitmap);
 
   // Restore object metadata
-  auto p = kv_store.db->NewIterator(ReadOptions(), kv_store.handles[CF_OBJ_META]);
+  auto p = kv_store.db->NewIterator(ReadOptions(), 
+    kv_store.handles[CF_OBJ_META]);
   for (p->SeekToFirst(); p->Valid(); p->Next()) {
     object_name = p->key().ToString();
 
@@ -72,6 +74,8 @@ void ObjectStore::recover() {
 
     deserialize(p->value().ToString(), *object);
   }
+
+  delete p;
 
   // TODO: Replay the write calls
 
@@ -93,7 +97,8 @@ std::shared_ptr<Object> ObjectStore::allocate_object(const std::string &name) {
   return object;
 }
 
-std::shared_ptr<Object> ObjectStore::search_object(const std::string &name, bool create) {
+std::shared_ptr<Object> ObjectStore::search_object(const std::string &name, 
+    bool create) {
   std::lock_guard<std::recursive_mutex> lock(index_mutex);
 
   auto f = index.find(name);
@@ -110,7 +115,8 @@ std::shared_ptr<Object> ObjectStore::search_object(const std::string &name, bool
 }
 
 
-int ObjectStore::put_object(const std::string &object_name, const uint32_t offset, const std::string &data) {
+int ObjectStore::put_object(const std::string &object_name, const uint32_t offset, 
+    const std::string &data) {
   std::shared_ptr<Object> object;
 
   if (object_name.empty()) {
@@ -426,12 +432,14 @@ void ObjectStore::read_buffer(const std::shared_ptr<Object> &object,
 }
 
 // TODO: refactor some portion of the code into read_object
-int ObjectStore::get_object(const std::string &object_name, std::string &out,  
+// TODO: should allow some parallelism. don't hold the lock for the 
+//       entire read operation
+int ObjectStore::get_object(const std::string &object_name, std::string *out,
     const uint32_t offset, const uint32_t size) {
   const lbn_t lbn_start = offset / opts.bso.block_size;
   const lbn_t lbn_end = (offset + size) / opts.bso.block_size;
   std::shared_ptr<Object> object;
-  Buffer * buffer;
+  Buffer *buffer;
   IoRequest *request;
   std::list<Buffer *> all_buffers;
   std::list<Buffer *> non_uptodate_buffers;
@@ -442,7 +450,7 @@ int ObjectStore::get_object(const std::string &object_name, std::string &out,
 
   object = search_object(object_name, false);
   if (object == nullptr) {
-    return OBJECT_NOT_EXISTS;
+    return OBJECT_NOT_FOUND;
   }
 
   if (size == 0) {
@@ -493,7 +501,7 @@ int ObjectStore::get_object(const std::string &object_name, std::string &out,
     buf_ptr = out_ptr == 0 ? offset % opts.bso.block_size: 0;
     bytes_to_read = std::min(opts.bso.block_size - buf_ptr, unread);
 
-    out.append(buffer->buf + buf_ptr, bytes_to_read);
+    out->append(buffer->buf + buf_ptr, bytes_to_read);
 
     out_ptr += bytes_to_read;
     unread -= bytes_to_read;
@@ -558,6 +566,63 @@ void ObjectStore::after_read(IoRequest *request, bool finished) {
   } else {
     request->notify_complete();
   }
+}
+
+int ObjectStore::put_metadata(const std::string &object_name, 
+    const std::string &attribute, const std::string &value) {
+  rocksdb::Status status;
+
+  if (search_object(object_name, false) == nullptr) {
+    return OBJECT_NOT_FOUND;
+  }
+
+  status = kv_store.put(CF_OBJ_META,
+    get_object_metadata_key(object_name, attribute),
+    value);
+
+  return OPERATION_SUCCESS;
+}
+
+int ObjectStore::get_metadata(const std::string &object_name,
+    const std::string &attribute, std::string *buf) {
+  rocksdb::Status status;
+
+  if (search_object(object_name, false) == nullptr) {
+    return OBJECT_NOT_FOUND;
+  }
+
+  status = kv_store.get(CF_OBJ_META,
+    get_object_metadata_key(object_name, attribute),
+    buf);
+
+  if (!status.ok()) {
+    if (status == status.NotFound()) {
+      return METADATA_NOT_FOUND;
+    }
+    std::cerr << status.ToString() << std::endl;
+    assert(0);
+  }
+
+  return OPERATION_SUCCESS;
+}
+
+int ObjectStore::delete_metadata(const std::string &object_name,
+    const std::string &attribute) {
+  rocksdb::Status status;
+
+  if (search_object(object_name, false) == nullptr) {
+    return OBJECT_NOT_FOUND;
+  }
+
+  status = kv_store.del(CF_OBJ_META,
+    get_object_metadata_key(object_name, attribute));
+
+  if (!status.ok()) {
+    std::cerr << status.ToString() << std::endl;
+    assert(0);
+  }
+
+  return OPERATION_SUCCESS;
 }
 
 }

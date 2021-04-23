@@ -63,6 +63,7 @@ message GetMetadataReply {
 
 message DeleteMetadataRequest {
   string object_name = 1;
+  string attribute = 2;
 }
 
 message DeleteMetadataReply {

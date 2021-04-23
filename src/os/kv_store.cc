@@ -207,8 +207,6 @@ void KvStore::close_routine() {
 }
 
 void KvStore::stop() {
-  //fprintf(stderr, "kvstore is try to stop\n");
-
   {
     std::lock_guard<std::mutex> lock(mutex);
 
@@ -240,8 +238,6 @@ void KvStore::stop() {
   assert(closed_txns.empty());
   assert(written_txns == 0);
   assert(open_txn == nullptr || !open_txn->has_handles());
-
-  //fprintf(stderr, "kvstore is stopped\n");
 }
 
 }

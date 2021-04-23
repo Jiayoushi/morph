@@ -13,11 +13,18 @@
 
 namespace morph {
 
-// TODO:...
-const uint8_t OBJECT_NOT_EXISTS = 1;
-const uint8_t NO_CONTENT = 2;          // 1. read parts that the object has not yet written
-const uint8_t OBJECT_NAME_INVALID = 3;
+enum ObjectOperationErrorCode {
+  OPERATION_SUCCESS = 0,
 
+  OBJECT_NOT_FOUND = 1,
+
+  // Read parts of an object that has no written content
+  NO_CONTENT = 2,
+
+  OBJECT_NAME_INVALID = 3,
+
+  METADATA_NOT_FOUND = 4
+};
 
 class ObjectStore {
  public:
@@ -30,8 +37,17 @@ class ObjectStore {
   int put_object(const std::string &object_name, const uint32_t offset, 
     const std::string &body);
 
-  int get_object(const std::string &object_name, std::string &buf, 
+  int get_object(const std::string &object_name, std::string *buf, 
     const uint32_t offset, const uint32_t size);
+
+  int put_metadata(const std::string &object_name, 
+    const std::string &attribute, const std::string &value);
+
+  int get_metadata(const std::string &object_name,
+    const std::string &attribute, std::string *buf);
+
+  int delete_metadata(const std::string &object_name,
+    const std::string &attribute);
 
   const ObjectStoreOptions opts;
 
@@ -113,6 +129,11 @@ class ObjectStore {
     char buf[512];
     sprintf(buf, "%032d-%s-%u", transaction_id, object_name.c_str(), offset);
     return std::string(buf);
+  }
+
+  std::string get_object_metadata_key(const std::string &object_name,
+      const std::string &attribute) {
+    return object_name + "-" + attribute;
   }
 
   bool is_block_aligned(uint32_t addr) const {

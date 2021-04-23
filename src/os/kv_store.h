@@ -171,6 +171,23 @@ class KvStore {
     handle->transaction->close_handle(handle);
   }
 
+  rocksdb::Status put(CF_INDEX column_family_index, const std::string &key,
+      const std::string &value) {
+    return db->Put(rocksdb::WriteOptions(), 
+      get_cf_handle(column_family_index), key, value);
+  }
+
+  rocksdb::Status get(CF_INDEX column_family_index, const std::string &key,
+      std::string *value) {
+    return db->Get(rocksdb::ReadOptions(), 
+      get_cf_handle(column_family_index), key, value);
+  }
+
+  rocksdb::Status del(CF_INDEX column_family_index, const std::string &key) {
+    return db->Delete(rocksdb::WriteOptions(),
+      get_cf_handle(column_family_index), key);
+  }
+
   void stop();
 
  private:
@@ -190,6 +207,9 @@ class KvStore {
     return handles[type];
   }
 
+  rocksdb::ColumnFamilyHandle *get_cf_handle(CF_INDEX index) const {
+    return handles[index - 1];
+  }
 
   void flush_routine();
 
