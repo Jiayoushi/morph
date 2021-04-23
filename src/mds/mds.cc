@@ -8,6 +8,8 @@
 
 namespace morph {
 
+namespace mds {
+
 MetadataServer::MetadataServer(const std::string &mds_addr, std::shared_ptr<grpc::Channel> channel) {
   try {
     std::string filepath = LOGGING_DIRECTORY + "/mds_" + mds_addr;
@@ -37,6 +39,8 @@ MetadataServer::MetadataServer(const std::string &mds_addr, std::shared_ptr<grpc
 
 MetadataServer::~MetadataServer() {
   logger->debug("Server destructor called.");
+}
+
 }
 
 }

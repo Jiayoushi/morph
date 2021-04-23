@@ -10,8 +10,11 @@ const ino_t FIRST_INODE_NUMBER = 1;
 
 namespace morph {
 
-Namespace::Namespace(std::shared_ptr<grpc::Channel> channel, std::shared_ptr<spdlog::logger> logger):
-  next_inode_number(FIRST_INODE_NUMBER) {
+namespace mds {
+
+Namespace::Namespace(std::shared_ptr<spdlog::logger> lg):
+    next_inode_number(FIRST_INODE_NUMBER),
+    logger(lg) {
   std::shared_ptr<Inode> root_inode;
   
   root = allocate_inode<InodeDirectory>(INODE_TYPE::DIRECTORY, 0, 0);
@@ -19,7 +22,7 @@ Namespace::Namespace(std::shared_ptr<grpc::Channel> channel, std::shared_ptr<spd
 
 Namespace::~Namespace() {}
 
-int Namespace::mkdir(cid_t cid, const char *pathname, mode_t mode) {
+int Namespace::mkdir(uid_t uid, const char *pathname, mode_t mode) {
   std::shared_ptr<InodeDirectory> parent;
   std::shared_ptr<InodeDirectory> new_dir;
   std::vector<std::string> components;
@@ -35,7 +38,7 @@ int Namespace::mkdir(cid_t cid, const char *pathname, mode_t mode) {
     return EEXIST;
   }
 
-  new_dir = allocate_inode<InodeDirectory>(INODE_TYPE::DIRECTORY, mode, cid);
+  new_dir = allocate_inode<InodeDirectory>(INODE_TYPE::DIRECTORY, mode, uid);
   parent->add_dentry(components.back().c_str(), new_dir->ino);
 
   //LogHandle *handle = journal.start();
@@ -46,7 +49,7 @@ int Namespace::mkdir(cid_t cid, const char *pathname, mode_t mode) {
   return 0;
 }
 
-int Namespace::stat(cid_t cid, const char *path, mds_rpc::Stat *stat) {
+int Namespace::stat(uid_t uid, const char *path, mds_rpc::FileStat *stat) {
   std::shared_ptr<Inode> inode;
   std::vector<std::string> components;
 
@@ -55,25 +58,30 @@ int Namespace::stat(cid_t cid, const char *path, mds_rpc::Stat *stat) {
   if (inode == nullptr) {
     return -1;
   }
-  stat->set_st_ino(inode->ino);
-  stat->set_st_mode(inode->mode);
-  stat->set_st_uid(inode->uid);
+  stat->set_ino(inode->ino);
+  stat->set_mode(inode->mode);
+  stat->set_uid(inode->uid);
   return 0;
 }
 
 
 // TODO: check the inode
-int Namespace::opendir(const char *pathname) {
+int Namespace::opendir(uid_t uid, const char *pathname) {
   std::vector<std::string> components;
 
   components = get_pathname_components(pathname);
   if (lookup(components) == nullptr) {
-    return -1;
+    return ENOENT;
   }
   return 0;
 }
 
-int Namespace::rmdir(const char *pathname) {
+// TODO: what should it even do..?
+int closedir() {
+  return 0;
+}
+
+int Namespace::rmdir(uid_t uid, const char *pathname) {
   std::vector<std::string> components;
   std::shared_ptr<InodeDirectory> parent;
   std::shared_ptr<Inode> dir;
@@ -105,7 +113,7 @@ int Namespace::rmdir(const char *pathname) {
   return 0;
 }
 
-int Namespace::readdir(const mds_rpc::DIR *dir, mds_rpc::dirent *dirent) {
+int Namespace::readdir(uid_t uid, const mds_rpc::DirRead *dir, mds_rpc::DirEntry *dirent) {
   std::vector<std::string> components;
   std::shared_ptr<Inode> ip;
   std::shared_ptr<InodeDirectory> dirp;
@@ -123,9 +131,9 @@ int Namespace::readdir(const mds_rpc::DIR *dir, mds_rpc::dirent *dirent) {
   }
 
   ip = get_inode(dentry->ino);
-  dirent->set_d_ino(ip->ino);
-  dirent->set_d_type(ip->type);
-  dirent->set_d_name(dentry->name);
+  dirent->set_ino(ip->ino);
+  dirent->set_type(ip->type);
+  dirent->set_name(dentry->name);
 
   return 0;
 }
@@ -200,4 +208,6 @@ std::string Namespace::form_log_key(ino_t ino, type_t type) {
   return std::to_string(ino) + "-" + std::to_string(type);
 }
 
-}
+} // namespace mds
+
+} // namespace morph

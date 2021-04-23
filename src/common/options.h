@@ -14,11 +14,6 @@ const enum spdlog::level::level_enum FLUSH_LEVEL = spdlog::level::level_enum::de
 const unsigned short PATHNAME_LIMIT = 128;
 const unsigned short FILENAME_LIMIT = 128;
 
-/* Storage */
-const std::string STORAGE_DIRECTORY = "persist";
-
-/* RPC */
-
 /* Journal */
 const char *const JOURNAL_DIRECTORY              = "."; //"/media/jyshi/abcde";
 const uint16_t JOURNAL_BLOCK_SIZE                = 1024;

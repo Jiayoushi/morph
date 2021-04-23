@@ -10,6 +10,8 @@
 
 namespace morph {
 
+namespace mds {
+
 class MetadataServer: NoCopy {
  public:
   MetadataServer(const std::string &mds_addr, std::shared_ptr<grpc::Channel> channel);
@@ -26,6 +28,8 @@ class MetadataServer: NoCopy {
   std::unique_ptr<Server> server;
 };
 
-};
+}
+
+}
 
 #endif

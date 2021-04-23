@@ -10,16 +10,20 @@ namespace morph {
 
 using grpc::ClientContext;
 
-int error_code;
+thread_local int error_code;
 
-MorphFsClient::MorphFsClient(const cid_t cid, const std::shared_ptr<Channel> channel):
+int get_error_code() {
+  return error_code;
+}
+
+MorphFsClient::MorphFsClient(const uid_t uid, const std::shared_ptr<Channel> channel):
   mds_stub(MdsService::NewStub(channel)),
-  cid(cid),
+  uid(uid),
   rid(0) {
 
   try {
-    std::string filepath = LOGGING_DIRECTORY + "/client-log-" + std::to_string(cid) + ".txt";
-    logger = spdlog::basic_logger_mt("client_logger_" + std::to_string(cid) + std::to_string(rand()), filepath, true);
+    std::string filepath = LOGGING_DIRECTORY + "/client-log-" + std::to_string(uid) + ".txt";
+    logger = spdlog::basic_logger_mt("client_logger_" + std::to_string(uid) + std::to_string(rand()), filepath, true);
     logger->set_level(LOGGING_LEVEL);
     logger->flush_on(FLUSH_LEVEL);
   } catch (const spdlog::spdlog_ex &ex) {
@@ -40,7 +44,7 @@ int MorphFsClient::mkdir(const char *pathname, mode_t mode) {
   logger->debug(fmt::sprintf("mkdir on pathname[%s] rid[%d]",
                 pathname, this_rid));
 
-  request.set_cid(cid);
+  request.set_uid(uid);
   request.set_rid(this_rid);
   request.set_mode(mode);
   request.set_pathname(pathname);
@@ -68,7 +72,7 @@ DIR *MorphFsClient::opendir(const char *pathname) {
   DIR *dir;
   uint64_t this_rid = rid++;
 
-  request.set_cid(cid);
+  request.set_uid(uid);
   request.set_rid(this_rid);
   request.set_pathname(pathname);
 
@@ -98,7 +102,7 @@ int MorphFsClient::rmdir(const char *pathname) {
   grpc::Status status;
   uint64_t this_rid = rid++;
 
-  request.set_cid(cid);
+  request.set_uid(uid);
   request.set_rid(this_rid);
   request.set_pathname(pathname);
 
@@ -121,7 +125,7 @@ int MorphFsClient::stat(const char *pathname, morph::stat *buf) {
   grpc::Status status;
   uint64_t this_rid = rid++;
 
-  request.set_cid(cid);
+  request.set_uid(uid);
   request.set_rid(this_rid);
   request.set_pathname(pathname);
   
@@ -154,7 +158,7 @@ dirent *MorphFsClient::readdir(morph::DIR *dir) {
   request_dir->set_pathname(dir->pathname);
   request_dir->set_pos(dir->pos);
 
-  request.set_cid(cid);
+  request.set_uid(uid);
   request.set_rid(this_rid);
   request.set_allocated_dir(request_dir);
 

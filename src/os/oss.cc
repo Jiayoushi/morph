@@ -4,11 +4,12 @@ namespace morph {
 
 grpc::Status ObjectStoreService::put_object(ServerContext *context, 
     const PutObjectRequest *request, PutObjectReply *reply)  {
-  object_store.put_object(request->object_name(), request->offset(), 
+  uint8_t ret_val;
+
+  ret_val = object_store.put_object(request->object_name(), request->offset(), 
     request->object_name());
 
-  reply->set_ret_val(0);
-
+  reply->set_ret_val(ret_val);
   return grpc::Status::OK;
 }
 

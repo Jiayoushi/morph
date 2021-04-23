@@ -14,13 +14,13 @@ namespace morph {
 using grpc::Channel;
 using mds_rpc::MdsService;
 
-extern int error_code;
-
 class Test;
+
+int get_error_code();
 
 class MorphFsClient: NoCopy {
  public:
-  MorphFsClient(const cid_t cid, const std::shared_ptr<Channel> channle);
+  MorphFsClient(const uid_t uid, const std::shared_ptr<Channel> channle);
 
   int mkdir(const char *pathname, mode_t mode);
   DIR *opendir(const char *pathname);
@@ -39,7 +39,7 @@ class MorphFsClient: NoCopy {
 
   std::shared_ptr<spdlog::logger> logger;
 
-  cid_t cid;                                     // Client ID
+  uid_t uid;                                     // Client ID
   std::atomic<rid_t> rid;                        // Request ID
 
   std::unique_ptr<MdsService::Stub> mds_stub;
