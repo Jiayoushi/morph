@@ -1,5 +1,5 @@
-#ifndef MORPH_COMMON_UTILS_H
-#define MORPH_COMMON_UTILS_H
+#ifndef MORPH_UTILS_H
+#define MORPH_UTILS_H
 
 #include <iostream>
 #include <string>
@@ -7,7 +7,19 @@
 #include <bitset>
 #include <atomic>
 
+#include "status.h"
+#include "env.h"
+#include "coding.h"
+
 namespace morph {
+
+inline Status posix_error(const std::string &context, int error_number) {
+  if (error_number == ENOENT) {
+    return Status::not_found(context, std::strerror(error_number));
+  } else {
+    return Status::io_error(context, std::strerror(error_number));
+  }
+}
 
 template <typename T>
 std::string serialize(const T &object) {
@@ -76,7 +88,22 @@ void flag_unmark(T *t, uint32_t fg) {
   t->flags.bits.store(t->flags.bits.load().reset(fg));
 }
 
+inline bool get_length_prefixed_slice(Slice *input, Slice *result) {
+  uint32_t len;
+  if (get_varint32(input, &len) && input->size() >= len) {
+    *result = Slice(input->data(), len);
+    input->remove_prefix(len);
+    return true;
+  } else {
+    return false;
+  }
 }
 
+inline void put_length_prefixed_slice(std::string *dst, const Slice &value) {
+  put_varint32(dst, value.size());
+  dst->append(value.data(), value.size());
+}
+
+} // namespace morph
 
 #endif

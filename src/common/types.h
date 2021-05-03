@@ -7,16 +7,14 @@
 
 namespace morph {
 
+// TODO: use capitalized letters...
 using op_t   = uint32_t;
 using hid_t  = uint64_t;        // Handle id
 using rid_t  = uint64_t;        // Request id
 using lbn_t  = uint32_t;        // Logical Block Number
-using off_t  = uint32_t;
 using type_t = uint8_t;         // Type of an inode
 
 using LogBuffers = std::string;
-
-
 
 }
 

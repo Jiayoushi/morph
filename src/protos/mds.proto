@@ -16,6 +16,7 @@ message FileStat {
   uint64 ino = 1;
   uint32 mode = 2;
   uint32 uid = 3;
+  uint32 nlink = 4;
 }
 
 message DirRead {

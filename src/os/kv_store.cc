@@ -36,7 +36,7 @@ KvStore::KvStore(KvStoreOptions opt):
 void KvStore::init_db(const bool recovery) {
   using namespace rocksdb;
 
-  Status s;
+  rocksdb::Status s;
   Options options;
   ColumnFamilyHandle *handle;
   std::vector<ColumnFamilyDescriptor> column_families;

@@ -1,5 +1,5 @@
-#ifndef MORPH_COMMON_NOCOPY_H
-#define MORPH_COMMON_NOCOPY_H
+#ifndef MORPH_NOCOPY_H
+#define MORPH_NOCOPY_H
 
 namespace morph {
   

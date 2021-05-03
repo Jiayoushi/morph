@@ -1,5 +1,5 @@
-#ifndef MORPH_COMMON_OPTIONS_H
-#define MORPH_COMMON_OPTIONS_H
+#ifndef MORPH_OPTIONS_H
+#define MORPH_OPTIONS_H
 
 #include <spdlog/common.h>
 
@@ -20,6 +20,10 @@ const uint16_t JOURNAL_BLOCK_SIZE                = 1024;
 const uint32_t JOURNAL_FILE_SIZE_THRESHOLD       = 4096;
 const uint8_t JOURNAL_TRANSACTION_CLOSE_INTERVAL = 1;
 const uint8_t JOURNAL_TRANSACTION_SYNC_INTERVAL  = 1;
+
+
+// TODO: actually this should be named as config, not as options.
+//   since you do not modify those during runtime.
 
 struct BlockStoreOptions {
   bool recover = false;

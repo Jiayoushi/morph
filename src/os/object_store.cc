@@ -161,7 +161,7 @@ void ObjectStore::object_large_write(std::shared_ptr<Object> object,
     const std::string &data) {
   using NewBufferList = typename std::list<Buffer *>;
 
-  const off_t start_off = offset / opts.bso.block_size,
+  const uint32_t start_off = offset / opts.bso.block_size,
               end_off = (offset + data.size()) / opts.bso.block_size;
   const uint32_t total_blocks = end_off - start_off + 1;
   Buffer *buffer;
@@ -325,8 +325,8 @@ void ObjectStore::log_write(const std::shared_ptr<Object> &object,
 }
 
 Buffer * ObjectStore::get_block(std::shared_ptr<Object> object, 
-    off_t target, off_t target_end, bool create, uint32_t new_blocks) {
-  Buffer * buffer;
+    uint32_t target, uint32_t target_end, bool create, uint32_t new_blocks) {
+  Buffer *buffer;
   Extent extent;
   uint32_t count;    /* How many blocks to allcoate if ncessary */
   lbn_t lbn;
@@ -383,8 +383,8 @@ uint32_t ObjectStore::write_buffer(const std::shared_ptr<Object> &object,
 }
 
 size_t ObjectStore::cow_write_buffer(const std::shared_ptr<Object> &object,
-    const off_t file_off, Buffer *dst_buffer,
-    off_t buf_off, size_t write_size, const char *data_ptr) {
+    const uint32_t file_off, Buffer *dst_buffer,
+    uint32_t buf_off, size_t write_size, const char *data_ptr) {
   Buffer *src_buffer;
 
   if (!is_block_aligned(write_size)) {

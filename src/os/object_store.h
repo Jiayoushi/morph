@@ -92,8 +92,8 @@ class ObjectStore {
    * Copies the data from block located at "file_off" to "new_buffer".
    */
   size_t cow_write_buffer(const std::shared_ptr<Object> &object,
-      const off_t file_off, Buffer *new_buffer,
-      off_t buf_off, size_t write_size, const char *data_ptr);
+      const uint32_t file_off, Buffer *new_buffer,
+      uint32_t buf_off, size_t write_size, const char *data_ptr);
 
   void log_write(const std::shared_ptr<Object> &object, 
     const std::string &object_name, IoRequest *request, 

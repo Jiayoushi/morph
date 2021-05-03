@@ -34,6 +34,14 @@ include_directories(src)
 include_directories(.)
 
 add_executable(namespace_test
+  src/common/env_posix.cc
+  src/common/status.cc
+  src/common/crc.cc
+  src/common/coding.cc
+  src/common/filename.cc
+  src/mds/log_reader.cc
+  src/mds/log_writer.cc
+  src/mds/write_batch.cc
   src/mds/namespace.cc
   src/tests/mds/namespace_test.cc)
 add_executable(block_store_test

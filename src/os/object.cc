@@ -3,7 +3,7 @@
 
 namespace morph {
 
-bool Object::search_extent(off_t file_off, Extent *ext) {
+bool Object::search_extent(uint32_t file_off, Extent *ext) {
   std::vector<Extent> res;
   EXTENT_TREE_ITER iter;
   lbn_t start, end;
@@ -32,10 +32,10 @@ bool Object::search_extent(off_t file_off, Extent *ext) {
  * [ ]  [ ]   [    ]  [ ]  [    ]     // extents
  */
 std::vector<std::pair<lbn_t, uint32_t>> Object::delete_extent_range(
-    off_t del_start, off_t del_end) {
-  std::map<off_t, Extent>::iterator iter;
+    uint32_t del_start, uint32_t del_end) {
+  std::map<uint32_t, Extent>::iterator iter;
   Extent ext;
-  off_t mutual_start, mutual_end;
+  uint32_t mutual_start, mutual_end;
   uint32_t len;
   std::vector<std::pair<lbn_t, uint32_t>> remove_blocks;
 

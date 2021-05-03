@@ -73,7 +73,7 @@ class Buffer: NoCopy {
 
   Flags<64> flags;
 
-  lbn_t lbn;                              // Physical block number
+  lbn_t lbn;
 
   uint32_t ref;
 

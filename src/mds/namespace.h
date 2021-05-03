@@ -13,15 +13,20 @@
 #include <spdlog/sinks/basic_file_sink.h>
 #include <proto_out/mds.grpc.pb.h>
 
+#include "write_batch.h"
+#include "log_writer.h"
+#include "inode.h"
+
 namespace morph {
 
 namespace mds {
 
+// TODO: don't use the shared_ptr for inode
 class Namespace: NoCopy {
  public:
-  Namespace() = delete;
+  Namespace();
 
-  Namespace(std::shared_ptr<spdlog::logger> logger);
+  Status open(std::shared_ptr<spdlog::logger> logger);
 
   ~Namespace();
 
@@ -39,42 +44,64 @@ class Namespace: NoCopy {
   int rmdir(uid_t, const char *pathname);
 
  private:
-  /* Directory management */
-  std::vector<std::string> get_pathname_components(const std::string &pathname);
+  struct Writer;
 
-  std::shared_ptr<Inode> lookup(const std::vector<std::string> &components);
+  std::vector<std::string> get_pathname_components(
+    const std::string &pathname);
 
-  std::shared_ptr<InodeDirectory> lookup_parent(const std::vector<std::string> &components);
+  Inode * lookup(const std::vector<std::string> &components);
 
-  std::shared_ptr<Inode> pathwalk(const std::vector<std::string> &components, 
+  InodeDirectory *get_parent_inode(
+    const std::vector<std::string> &components);
+
+  Inode * pathwalk(const std::vector<std::string> &components, 
     bool stop_at_parent = false);
 
-  /* Inode management */
   template <typename InodeType>
-  std::shared_ptr<InodeType> allocate_inode(type_t type, mode_t mode, uid_t uid);
+  InodeType * allocate_inode(type_t type, mode_t mode, 
+    uid_t uid);
 
-  std::shared_ptr<Inode> get_inode(ino_t ino);
+  Inode * get_inode(InodeNumber ino);
 
-  void remove_inode(ino_t ino);
+  void remove_inode(InodeNumber ino);
 
-  std::string form_log_key(ino_t ino, type_t type);
+  Status write_to_log(bool sync, WriteBatch *batch);
 
-  std::shared_ptr<InodeDirectory> root;
+  Status make_room_for_log_write();
 
-  std::atomic<ino_t> next_inode_number;
+  void record_background_error(const Status &s);
 
-  std::unordered_map<ino_t, std::shared_ptr<Inode>> inode_map;
+  WriteBatch * build_batch_group(Writer **last_writer);
+
+  void recover();
 
   std::shared_ptr<spdlog::logger> logger;
+
+  std::mutex mutex;
+
+  InodeDirectory *root;
+  std::atomic<InodeNumber> next_inode_number;
+  std::unordered_map<InodeNumber, Inode *> inode_map;
+
+  uint64_t logfile_number;
+  uint64_t sequence_number;
+  size_t logged_batch_size;
+  log::Writer *log;
+  WritableFile *logfile;
+  std::condition_variable background_work_finished_signal;
+
+  std::deque<Writer *> writers;
+  WriteBatch *tmp_batch;
+
+  Status bg_error;
 };
 
 template <typename InodeType>
-std::shared_ptr<InodeType> Namespace::allocate_inode(type_t type, mode_t mode, uid_t uid) {
-  ino_t ino = next_inode_number++;
-
-  std::shared_ptr<InodeType> inode = std::make_shared<InodeType>(type, ino, mode, uid);
-  inode_map.insert(std::pair<ino_t, std::shared_ptr<InodeType>>(ino, inode));
-
+InodeType * Namespace::allocate_inode(type_t type, mode_t mode, 
+    uid_t uid) {
+  InodeNumber ino = next_inode_number++;
+  InodeType *inode = new InodeType(type, ino, mode, uid);
+  inode_map.insert(std::pair<InodeNumber, InodeType *>(ino, inode));
   return inode;
 }
 

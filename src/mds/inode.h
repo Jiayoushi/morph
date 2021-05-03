@@ -9,102 +9,145 @@ namespace morph {
 
 namespace mds {
 
-enum INODE_TYPE {
-  FILE,
-  DIRECTORY
-};
+using InodeNumber = uint64_t;
 
-enum INODE_OPERATION {
-  CREATE_INODE = 0,
-  UPDATE_INODE = 1,
-  REMOVE_INODE = 2,
+enum INODE_TYPE {
+  FILE = 0,
+  DIRECTORY = 1
 };
 
 class Inode: NoCopy {
  public:
-  type_t type;                // the types are either file, directory
-
-  ino_t ino;
-
+  type_t type;                // File or directory
+  InodeNumber ino;
   mode_t mode;
-
   uid_t uid;
+  uint32_t links;             // Number of hard links.
 
   std::mutex mutex;
 
-  MSGPACK_DEFINE_ARRAY(type, ino, mode, uid);
+  MSGPACK_DEFINE_ARRAY(type, ino, mode, uid, links);
 
-  Inode() {}
-  Inode(type_t type, ino_t ino, mode_t mode, uid_t uid):
-    type(type), ino(ino), mode(mode), uid(uid) {}
-};
+  Inode() = delete;
 
-class InodeFile: public Inode {
- public:
-  MSGPACK_DEFINE_ARRAY(type, ino, mode, uid);
+  virtual ~Inode() {}
 
-  InodeFile() {}
+  Inode(type_t type, InodeNumber ino, mode_t mode, uid_t uid):
+    type(type), ino(ino), mode(mode), uid(uid), links(0)
+  {}
 
-  InodeFile(type_t type, ino_t ino, mode_t mode, uid_t uid):
-    Inode(type, ino, mode, uid) {}
+  std::string serialize() {
+    std::stringstream ss;
+    clmdep_msgpack::pack(ss, *this);
+    return ss.str();
+  }
+
+  void serialize(std::stringstream *ss) {
+    clmdep_msgpack::pack(*ss, *this);
+  }
+
+  size_t deserialize(const std::string &s) {
+    using namespace clmdep_msgpack;
+
+    size_t offset = 0;
+    object_handle oh = unpack(s.data(), s.size(), offset);
+    object obj = oh.get();
+    obj.convert(*this);
+    return offset;
+  }
 };
 
 
 struct Dentry {
-  char name[FILENAME_LIMIT];
-  ino_t ino;
+  std::string name;
+  InodeNumber ino;
 
   Dentry() {}
-  Dentry(const char *n, ino_t i):
-    ino(i) {
-    strcpy(name, n);
-  }
+  Dentry(std::string name, InodeNumber ino):
+    name(name),
+    ino(ino) {}
 
   MSGPACK_DEFINE_ARRAY(name, ino);
 };
 
 class InodeDirectory: public Inode {
  public:
-  std::vector<std::shared_ptr<Dentry>> children;
+  std::vector<Dentry *> children;
 
-  MSGPACK_DEFINE_ARRAY(type, ino, mode, uid, children);
+  InodeDirectory() = delete;
 
-  InodeDirectory() {}
+  ~InodeDirectory() override {
+    for (auto &child: children) {
+      delete child;
+    }
+  }
 
-  InodeDirectory(type_t type, ino_t ino, mode_t mode, uid_t uid):
+  InodeDirectory(type_t type, InodeNumber ino, mode_t mode, uid_t uid):
     Inode(type, ino, mode, uid) {}
 
-  std::shared_ptr<Dentry> find_dentry(const char *name) {
-    for (const auto &child: children) {
-      if (strcmp(child->name, name) == 0) {
-        return std::shared_ptr<Dentry>(child);
+  Dentry * find_dentry(const char *name) {
+    for (const auto child: children) {
+      if (strcmp(child->name.c_str(), name) == 0) {
+        return child;
       }
     }
     return nullptr;
   }
 
-  void add_dentry(const char *name, ino_t ino) {
-    children.emplace_back(std::make_shared<Dentry>(name, ino));
+  void add_dentry(const char *name, InodeNumber ino) {
+    children.emplace_back(new Dentry(name, ino));
   }
 
-  void remove_dentry(ino_t ino) {
+  void remove_dentry(InodeNumber ino) {
     for (auto iter = children.begin(); iter != children.end(); ++iter) {
       if ((*iter)->ino == ino) {
+        delete *iter;
         children.erase(iter);
         return;
       }
     }
+    assert(false);
   }
 
   bool empty() {
     return children.empty();
   }
 
-  std::shared_ptr<Dentry> get_dentry(int index) {
-    if (index < 0 || index >= children.size()) {
-      return nullptr;
-    }
+  Dentry * get_dentry(int index) {
+    assert(index >= 0 && index <= children.size());
     return children[index];
+  }
+
+  std::string serialize() {
+    std::stringstream ss;
+    Inode *base = static_cast<Inode *>(this);
+    base->serialize(&ss);
+    clmdep_msgpack::pack(ss, children.size());
+    for (const auto &v: children) {
+      clmdep_msgpack::pack(ss, *v);
+    }
+    return ss.str();
+  }
+
+  void deserialize(const std::string &s) {
+    using namespace clmdep_msgpack;
+
+    size_t offset = 0;
+    size_t size;
+    object_handle oh;
+    object obj;
+
+    Inode *base = static_cast<Inode *>(this);
+    offset = base->deserialize(s);
+
+    oh = unpack(s.data(), s.size(), offset);
+    size = oh.get().as<size_t>();
+    
+    for (size_t i = 0; i < size; ++i) {
+      oh = unpack(s.data(), s.size(), offset);
+      Dentry dentry = oh.get().as<Dentry>();
+      add_dentry(dentry.name.c_str(), dentry.ino);
+    }
   }
 };
 

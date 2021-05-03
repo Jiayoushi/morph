@@ -20,9 +20,9 @@ struct Extent {
    * It can be 7th block, or 155th block, ... 
    * Note it's always block aligned.
    */  
-  off_t off_start;
+  uint32_t off_start;
 
-  off_t off_end;    // The offset of the ending block
+  uint32_t off_end;    // The offset of the ending block
 
   lbn_t lbn;             // The mapped first logical block number
 
@@ -32,7 +32,7 @@ struct Extent {
     off_start(INVALID_EXTENT)
   {}
 
-  Extent(off_t s_off, off_t e_off, lbn_t logical_start):
+  Extent(uint32_t s_off, uint32_t e_off, lbn_t logical_start):
     off_start(s_off),
     off_end(e_off),
     lbn(logical_start) {
@@ -47,7 +47,7 @@ struct Extent {
     return memcmp(this, &rhs, sizeof(Extent)) == 0;
   }
 
-  lbn_t compute_lbn(off_t off) {
+  lbn_t compute_lbn(uint32_t off) {
     assert(off >= off_start && off <= off_end);
     return lbn + off - off_start;
   }
@@ -71,14 +71,14 @@ class Object {
   // On failure, it returns false.
   //   If there is a extent whose start is greater than lbn, then ext is set to that extent.
   //   If not, then ext is going to be set as a INVALID_EXTENT.
-  bool search_extent(off_t off, Extent *ext);
+  bool search_extent(uint32_t off, Extent *ext);
 
   // Get the pointer to the extent that covers the logical block "lbn".
   //
   // Return:
   //   On success, returns the pointer.
   //   On failure, returns nullptr.
-  Extent *get_extent(off_t off) {
+  Extent *get_extent(uint32_t off) {
     auto iter = extent_tree.lower_bound(off);
     if (iter != extent_tree.end()) {
       return &iter->second;
@@ -87,12 +87,12 @@ class Object {
     }
   }
 
-  void insert_extent(off_t start, off_t end, lbn_t lbn) {
+  void insert_extent(uint32_t start, uint32_t end, lbn_t lbn) {
     extent_tree.emplace(end, Extent(start, end, lbn));
   }
 
-  std::vector<std::pair<lbn_t, uint32_t>> delete_extent_range(off_t start, 
-      off_t end);
+  std::vector<std::pair<lbn_t, uint32_t>> delete_extent_range(uint32_t start, 
+      uint32_t end);
 
   std::string get_name() const {
     return name;
@@ -114,7 +114,7 @@ class Object {
   uint32_t size;
 
   // Sorted by the the last logical block offset covered by the extent
-  std::map<off_t, Extent> extent_tree;
+  std::map<uint32_t, Extent> extent_tree;
 };
 
 }
