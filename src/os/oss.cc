@@ -1,70 +1,45 @@
-#include <os/oss.h>
+#include "oss.h"
+
+#include "common/network.h"
 
 namespace morph {
 
-grpc::Status ObjectStoreService::put_object(ServerContext *context, 
-    const PutObjectRequest *request, PutObjectReply *reply)  {
-  uint8_t ret_val;
+namespace oss {
 
-  ret_val = object_store.put_object(request->object_name(), request->offset(), 
-    request->object_name());
+ObjectStoreServer::ObjectStoreServer(const NetworkAddress &this_addr, 
+    const monitor::Config &monitor_config) {
+  {
+    try {
+      std::string filepath = LOGGING_DIRECTORY + "/oss_" + this_addr;
+      logger = spdlog::basic_logger_mt(
+        "oss_" + this_addr + std::to_string(rand()), filepath, true);
+      logger->set_level(LOGGING_LEVEL);
+      logger->flush_on(FLUSH_LEVEL);
+    } catch (const spdlog::spdlog_ex &ex) {
+      std::cerr << "object store server Log init failed: " << ex.what() << std::endl;
+      exit(EXIT_FAILURE);
+    }
+  }
 
-  reply->set_ret_val(ret_val);
-  return grpc::Status::OK;
+  logger->debug("logger initialized");
+
+  // Create object store service
+  service = std::make_unique<ObjectStoreServiceImpl>(this_addr, monitor_config, 
+                                                     logger);
+
+  // Create object store server
+  grpc::ServerBuilder builder;
+  builder.AddListeningPort(this_addr, grpc::InsecureServerCredentials())
+         .RegisterService(service.get());
+  server = builder.BuildAndStart();
+  if (server == nullptr) {
+    std::cerr << "object store server failed to create grpc server" << std::endl;
+    exit(EXIT_FAILURE);
+  }
 }
 
-grpc::Status ObjectStoreService::get_object(ServerContext *context, 
-    const GetObjectRequest *request, GetObjectReply *reply) {
-  uint8_t ret_val;
-  std::string *buf = new std::string();
+ObjectStoreServer::~ObjectStoreServer() {}
 
-  buf->reserve(request->size());
-  ret_val = object_store.get_object(request->object_name(), buf, 
-    request->offset(), request->size());
+} // namespace oss
 
-  reply->set_ret_val(ret_val);
-  reply->set_allocated_body(buf);
-  return grpc::Status::OK;
-}
-
-grpc::Status ObjectStoreService::delete_object(ServerContext *context, 
-    const DeleteObjectRequest *request, DeleteObjectReply *reply) {
-  return grpc::Status::OK;
-}
-
-grpc::Status ObjectStoreService::put_metadata(ServerContext *context, 
-    const PutMetadataRequest *request, PutMetadataReply *reply) {
-  uint8_t ret_val;
-  
-  ret_val = object_store.put_metadata(request->object_name(), 
-    request->attribute(), request->value());
-
-  reply->set_ret_val(ret_val);
-  return grpc::Status::OK;
-}
-
-grpc::Status ObjectStoreService::get_metadata(ServerContext *context, 
-    const GetMetadataRequest *request, GetMetadataReply *reply) {
-  uint8_t ret_val;
-  std::string *buf = new std::string();
-
-  ret_val = object_store.get_metadata(request->object_name(), 
-    request->attribute(), buf);
-
-  reply->set_ret_val(ret_val);
-  reply->set_allocated_value(buf);
-  return grpc::Status::OK;
-}
-
-grpc::Status ObjectStoreService::delete_metadata(ServerContext *context, 
-    const DeleteMetadataRequest *request, DeleteMetadataReply *reply) {
-  uint8_t ret_val;
-  
-  ret_val = object_store.delete_metadata(request->object_name(),
-    request->attribute());
-
-  reply->set_ret_val(ret_val);
-  return grpc::Status::OK;
-}
-
-}
+} // namespace morph

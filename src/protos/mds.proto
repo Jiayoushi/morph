@@ -2,12 +2,14 @@ syntax = "proto3";
 
 package mds_rpc;
 
-service MdsService {
+service MetadataService {
   rpc mkdir (MkdirRequest) returns (MkdirReply) {};
   rpc opendir (OpendirRequest) returns (OpendirReply) {};
   rpc rmdir(RmdirRequest) returns (RmdirReply) {};
   rpc stat (StatRequest) returns (StatReply) {};
   rpc readdir (ReaddirRequest) returns (ReaddirReply) {};
+
+  rpc update_oss_cluster(UpdateOssClusterRequest) returns (UpdateOssClusterReply) {};
 }
 
 
@@ -83,4 +85,12 @@ message ReaddirRequest {
 message ReaddirReply {
   int32 ret_val = 1;
   DirEntry entry = 2;
+}
+
+message UpdateOssClusterRequest {
+  
+}
+
+message UpdateOssClusterReply {
+  int32 ret_val = 1;
 }

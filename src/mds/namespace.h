@@ -6,13 +6,13 @@
 #include <mutex>
 #include <memory>
 #include <atomic>
-#include <mds/inode.h>
-#include <common/types.h>
-#include <common/options.h>
-#include <grpcpp/grpcpp.h>
+
 #include <spdlog/sinks/basic_file_sink.h>
 #include <proto_out/mds.grpc.pb.h>
 
+#include "common/types.h"
+#include "common/options.h"
+#include "common/env.h"
 #include "write_batch.h"
 #include "log_writer.h"
 #include "inode.h"
@@ -20,6 +20,7 @@
 namespace morph {
 
 namespace mds {
+
 
 // TODO: don't use the shared_ptr for inode
 class Namespace: NoCopy {
@@ -73,7 +74,10 @@ class Namespace: NoCopy {
 
   WriteBatch * build_batch_group(Writer **last_writer);
 
-  void recover();
+  Status recover();
+
+  Status sync_log_to_oss(const std::string &file);
+
 
   std::shared_ptr<spdlog::logger> logger;
 

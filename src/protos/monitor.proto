@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package monitor_rpc;
+
+service MonitorService {
+  rpc get_oss_cluster(GetOssClusterRequest) returns (GetOssClusterReply) {};
+  rpc add_oss(AddOssRequest) returns (AddOssReply) {};
+  rpc remove_oss(RemoveOssRequest) returns (RemoveOssReply) {};
+}
+
+message OssInfo {
+  string addr = 1;
+}
+
+message GetOssClusterRequest {
+  uint64 version = 1;
+}
+
+message GetOssClusterReply {
+  uint64 version = 1;
+  repeated OssInfo info = 2;
+  int32 ret_val = 3;
+}
+
+message AddOssRequest {
+  OssInfo info = 1;
+}
+
+message AddOssReply {
+  int32 ret_val = 1;
+}
+
+message RemoveOssRequest {
+  OssInfo info = 1;
+}
+
+message RemoveOssReply {
+  int32 ret_val = 1;
+}

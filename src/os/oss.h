@@ -1,40 +1,41 @@
-#ifndef MORPH_OS_OSS
-#define MORPH_OS_OSS
+#ifndef MORPH_OSS_OSS_H
+#define MORPH_OSS_OSS_H
 
-#include <proto_out/oss.grpc.pb.h>
+#include <sys/types.h>
+#include <spdlog/sinks/basic_file_sink.h>
+#include <grpcpp/grpcpp.h>
 
-#include <os/object_store.h>
+
+#include "service_impl.h"
+#include "common/network.h"
+#include "monitor/config.h"
 
 namespace morph {
 
-using namespace oss_rpc;
+namespace oss {
 
-using grpc::ServerContext;
-
-class ObjectStoreService final: oss_rpc::ObjectStoreService::Service {
+// The server class is required since grpc requires a server instance
+// to register the service.
+class ObjectStoreServer: NoCopy {
  public:
-  grpc::Status put_object(ServerContext *, const PutObjectRequest *, 
-    PutObjectReply *) override;
+  ObjectStoreServer(const NetworkAddress &this_addr, 
+    const monitor::Config &monitor_config);
 
-  grpc::Status get_object(ServerContext *, const GetObjectRequest *, 
-    GetObjectReply *) override;
+  ~ObjectStoreServer();
 
-  grpc::Status delete_object(ServerContext *, const DeleteObjectRequest *, 
-    DeleteObjectReply *) override;
-
-  grpc::Status put_metadata(ServerContext *, const PutMetadataRequest *, 
-    PutMetadataReply *) override;
-
-  grpc::Status get_metadata(ServerContext *, const GetMetadataRequest *, 
-    GetMetadataReply *) override;
-
-  grpc::Status delete_metadata(ServerContext *, const DeleteMetadataRequest *, 
-    DeleteMetadataReply *) override;
+  void wait() {
+    server->Wait();
+  }
 
  private:
-  ObjectStore object_store;
+  std::shared_ptr<spdlog::logger> logger;
+
+  std::unique_ptr<ObjectStoreServiceImpl> service;
+  std::unique_ptr<grpc::Server> server;
 };
 
-}
+} // namespace mds
+
+} // namespace morph
 
 #endif

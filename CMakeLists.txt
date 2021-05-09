@@ -44,6 +44,11 @@ add_executable(namespace_test
   src/mds/write_batch.cc
   src/mds/namespace.cc
   src/tests/mds/namespace_test.cc)
+add_executable(monitor_test
+  src/common/network.cc
+  src/monitor/service_impl.cc
+  src/monitor/monitor.cc
+  src/tests/monitor/monitor_test.cc)
 add_executable(block_store_test
   src/os/block_allocator.cc
   src/os/block_store.cc
@@ -64,7 +69,16 @@ add_library(morph_grpc_proto
   "proto_out/mds.pb.cc"
   "proto_out/mds.pb.h"
   "proto_out/mds.grpc.pb.cc"
-  "proto_out/mds.grpc.pb.h")
+  "proto_out/mds.grpc.pb.h"
+  "proto_out/monitor.pb.cc"
+  "proto_out/monitor.pb.h"
+  "proto_out/monitor.grpc.pb.cc"
+  "proto_out/monitor.grpc.pb.h"
+  "proto_out/oss.pb.cc"
+  "proto_out/oss.pb.h"
+  "proto_out/oss.grpc.pb.cc"
+  "proto_out/oss.grpc.pb.h")
+
 
 target_link_libraries(morph_grpc_proto
   ${_REFLECTION}
@@ -74,6 +88,13 @@ target_link_libraries(morph_grpc_proto
 # otherwise there will be memory/initialization-related error emitted when you create a
 # message instance. Find out why later.
 target_link_libraries(namespace_test
+  gtest
+  gRPC::grpc++
+  morph_grpc_proto
+  ${_REFLECTION}
+  ${_GRPC_GRPCPP}
+  ${_PROTOBUF_LIBPROTOBUF})
+target_link_libraries(monitor_test
   gtest
   gRPC::grpc++
   morph_grpc_proto

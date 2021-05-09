@@ -26,3 +26,9 @@ protoc src/protos/oss.proto \
        --grpc_out=$out     \
        --cpp_out=$out      \
        --plugin=protoc-gen-grpc=/home/jyshi/.local/bin/grpc_cpp_plugin
+
+protoc src/protos/monitor.proto \
+       -I src/protos       \
+       --grpc_out=$out     \
+       --cpp_out=$out      \
+       --plugin=protoc-gen-grpc=/home/jyshi/.local/bin/grpc_cpp_plugin

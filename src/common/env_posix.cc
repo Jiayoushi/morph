@@ -6,15 +6,22 @@
 
 #include "env.h"
 
-#include <string>
 #include <unistd.h>
 #include <fcntl.h>
+#include <dirent.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <string>
 
 #include "utils.h"
 
 namespace morph {
 
 constexpr const size_t WRITABLE_FILE_BUFFER_SIZE = 2048;
+
+SequentialFile::~SequentialFile() {}
+
+WritableFile::~WritableFile() {}
 
 class PosixSequentialFile final: public SequentialFile {
  public:
@@ -170,6 +177,18 @@ Status new_writable_file(const std::string &filename,
   return Status::ok();
 }
 
+Status new_sequential_file(const std::string &filename,
+    SequentialFile **result) {
+  int fd = ::open(filename.c_str(), O_RDONLY);
+  if (fd < 0) {
+    *result = nullptr;
+    return posix_error(filename, errno);
+  }
+
+  *result = new PosixSequentialFile(filename, fd);
+  return Status::ok();
+}
+
 bool file_exists(const char *pathname) {
   return ::access(pathname, F_OK) == 0;
 }
@@ -177,15 +196,22 @@ bool file_exists(const char *pathname) {
 Status get_children(const std::string& directory_path,
     std::vector<std::string>* result) {
   result->clear();
-  ::DIR* dir = ::opendir(directory_path.c_str());
+  ::DIR *dir = ::opendir(directory_path.c_str());
   if (dir == nullptr) {
     return posix_error(directory_path, errno);
   }
-  struct ::dirent* entry;
+  struct ::dirent *entry;
   while ((entry = ::readdir(dir)) != nullptr) {
     result->emplace_back(entry->d_name);
   }
   ::closedir(dir);
+  return Status::ok();
+}
+
+Status create_directory(const std::string &dirname) {
+  if (::mkdir(dirname.c_str(), 0755) != 0) {
+    return posix_error(dirname, errno);
+  }
   return Status::ok();
 }
 

@@ -8,6 +8,7 @@
 #define MORPH_ENV_H
 
 #include <memory>
+#include <vector>
 
 #include "status.h"
 #include "nocopy.h"
@@ -21,7 +22,7 @@ class WritableFile: NoCopy {
  public:
   WritableFile() = default;
 
-  virtual ~WritableFile() = default;
+  virtual ~WritableFile();
 
   virtual Status append(const Slice &data) = 0;
 
@@ -53,10 +54,15 @@ class SequentialFile: NoCopy {
 Status new_writable_file(const std::string &filename, 
   WritableFile **result);
 
+Status new_sequential_file(const std::string &filename,
+  SequentialFile **result);
+
 bool file_exists(const char *pathname);
 
 Status get_children(const std::string& directory_path,
-    std::vector<std::string>* result);
+    std::vector<std::string> *result);
+
+Status create_directory(const std::string &name);
 
 } // namespace morph
 

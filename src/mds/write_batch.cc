@@ -129,6 +129,25 @@ size_t WriteBatch::approximate_size() const {
   return rep.size();
 }
 
+namespace {
+class OssSyncer: public WriteBatch::Handler {
+ public:
+  void put(const Slice &key, const Slice &value) override {
+
+  }
+
+  void del(const Slice &key) override {
+
+  }
+};
+
+} // namespace
+
+//Status WriteBatchInternal::sync_batch_to_oss(const WriteBatch *b, ) {
+//  OssSyncer syncer;
+//
+//}
+
 } // namespace mds
 
 } // namespace morph

@@ -9,6 +9,8 @@
 #include <condition_variable>
 
 #include "config.h"
+#include "log_reader.h"
+#include "log_writer.h"
 #include "write_batch.h"
 #include "write_batch_internal.h"
 #include "common/filename.h"
@@ -33,21 +35,25 @@ struct Namespace::Writer {
 };
 
 Namespace::Namespace():
-    root(nullptr),
-    next_inode_number(FIRST_INODE_NUMBER),
-    logged_batch_size(0), logfile_number(FIRST_LOG_FILE_NUMBER), sequence_number(0), log(nullptr), 
-    logfile(nullptr), tmp_batch(nullptr) {}
+  root(nullptr),
+  next_inode_number(FIRST_INODE_NUMBER),
+  logged_batch_size(0), logfile_number(FIRST_LOG_FILE_NUMBER), 
+  sequence_number(0), log(nullptr), logfile(nullptr), tmp_batch(nullptr) {}
 
 Status Namespace::open(std::shared_ptr<spdlog::logger> logger) {
   Status s;
 
   // Try to recover if "mds" directory exists
   if (file_exists("mds")) {
-    return recover(names);
+    s = recover();
+    if (!s.is_ok()) {
+      return s;
+    }
+  } else {
+    create_directory("mds");
+    root = allocate_inode<InodeDirectory>(INODE_TYPE::DIRECTORY, 0, 0);
   }
 
-  // "mds" directory does not exist, start a new namespace
-  root = allocate_inode<InodeDirectory>(INODE_TYPE::DIRECTORY, 0, 0);
   WritableFile *lfile;
   s = new_writable_file(log_file_name("mds", logfile_number), &lfile);
   if (s.is_ok()) {
@@ -72,20 +78,44 @@ Status Namespace::recover() {
     return s;
   }
 
-  if (!names.empty()) {
-    sort(names.begin(), names.end());
+  sort(names.begin(), names.end());
 
-    // Right now there are only log files, so it is safe to assume we can
-    // initilize our log number directly form last file's name.
-    logfile_number = get_number(names.back());
-  } else {
-    logfile_number = FIRST_LOG_FILE_NUMBER;
+  // Sync the logs to remote ods.
+  for (const auto &name: names) {
+    s = sync_log_to_oss(name);
+    if (!s.is_ok()) {
+      return s;
+    }
   }
 
-  // If there is any log file that is completed but yet not synced to remote,
-  // do it now.
-
   // Read all metadata from remote ods.
+
+  return s;
+}
+
+Status Namespace::sync_log_to_oss(const std::string &name) {
+  SequentialFile *file;
+  Status s = new_sequential_file(name, &file);
+  if (!s.is_ok()) {
+    return s;
+  }
+
+  // Read all the records and apply to oss.
+  log::Reader reader(file, true);
+  std::string scratch;
+  Slice record;
+  WriteBatch batch;
+  while (reader.read_record(&record, &scratch)) {
+    if (record.size() < 12) {
+      fprintf(stderr, "log record too small");
+      assert(false);
+    }
+    WriteBatchInternal::set_contents(&batch, record);
+  }
+
+  // Delete this log file
+
+  return s;
 }
 
 Namespace::~Namespace() {

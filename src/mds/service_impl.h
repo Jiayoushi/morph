@@ -1,9 +1,10 @@
-#ifndef MORPH_MDS_SERVICE_H
-#define MORPH_MDS_SERVICE_H
+#ifndef MORPH_MDS_SERVICE_IMPL_H
+#define MORPH_MDS_SERVICE_IMPL_H
 
 #include <proto_out/mds.grpc.pb.h>
-#include <mds/namespace.h>
-#include <mds/request_cache.h>
+#include <proto_out/monitor.grpc.pb.h>
+
+#include "namespace.h"
 
 namespace morph {
 
@@ -12,14 +13,16 @@ namespace mds {
 using grpc::Server;
 using grpc::ServerBuilder;
 using grpc::ServerContext;
+using monitor_rpc::MonitorService;
 
 using namespace mds_rpc;
 
-class MdsServiceImpl final: public mds_rpc::MdsService::Service {
+class MetadataServiceImpl final: public mds_rpc::MetadataService::Service {
  public:
-  MdsServiceImpl(std::shared_ptr<spdlog::logger> logger);
+  MetadataServiceImpl(std::shared_ptr<MonitorService::Stub> monitor,
+    std::shared_ptr<spdlog::logger> logger);
 
-  ~MdsServiceImpl() {}
+  ~MetadataServiceImpl() {}
 
   grpc::Status mkdir(ServerContext *context, const MkdirRequest *request, 
     MkdirReply *reply) override;
@@ -36,12 +39,12 @@ class MdsServiceImpl final: public mds_rpc::MdsService::Service {
   grpc::Status readdir(ServerContext *context, const ReaddirRequest *request, 
     ReaddirReply *reply) override;
 
+ private:
   std::shared_ptr<spdlog::logger> logger;
 
- private:
   Namespace name_space;
 
-  RequestCache request_cache;
+  std::shared_ptr<MonitorService::Stub> monitor;
 };
 
 }

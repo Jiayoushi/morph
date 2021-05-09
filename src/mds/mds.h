@@ -2,11 +2,14 @@
 #define MORPH_MDS_MDS_H
 
 #include <sys/types.h>
-#include <mds/namespace.h>
-#include <mds/mds.h>
 #include <spdlog/sinks/basic_file_sink.h>
-#include <mds/request_cache.h>
-#include <mds/service.h>
+#include <grpcpp/grpcpp.h>
+#include <proto_out/monitor.grpc.pb.h>
+
+#include "namespace.h"
+#include "service_impl.h"
+#include "common/network.h"
+#include "monitor/config.h"
 
 namespace morph {
 
@@ -14,7 +17,9 @@ namespace mds {
 
 class MetadataServer: NoCopy {
  public:
-  MetadataServer(const std::string &mds_addr, std::shared_ptr<grpc::Channel> channel);
+  MetadataServer(const NetworkAddress &mds_addr, 
+    const monitor::Config &monitor_config);
+
   ~MetadataServer();
 
   void wait() {
@@ -24,12 +29,15 @@ class MetadataServer: NoCopy {
  private:
   std::shared_ptr<spdlog::logger> logger;
 
-  std::unique_ptr<MdsServiceImpl> service;
+  std::unique_ptr<MetadataServiceImpl> service;
+
   std::unique_ptr<Server> server;
+
+  std::shared_ptr<monitor_rpc::MonitorService::Stub> monitor;
 };
 
-}
+} // namespace mds
 
-}
+} // namespace morph
 
 #endif
