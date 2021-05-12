@@ -78,7 +78,7 @@ class Object {
   // Return:
   //   On success, returns the pointer.
   //   On failure, returns nullptr.
-  Extent *get_extent(uint32_t off) {
+  Extent * get_extent(uint32_t off) {
     auto iter = extent_tree.lower_bound(off);
     if (iter != extent_tree.end()) {
       return &iter->second;
@@ -92,7 +92,7 @@ class Object {
   }
 
   std::vector<std::pair<lbn_t, uint32_t>> delete_extent_range(uint32_t start, 
-      uint32_t end);
+                                                              uint32_t end);
 
   std::string get_name() const {
     return name;

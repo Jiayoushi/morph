@@ -29,7 +29,7 @@ TEST(BlockStoreTest, ConcurrentAllocate) {
   const int action_count = 3000;
   BlockStoreOptions opts;
   opts.TOTAL_BLOCKS = 128;
-  std::shared_ptr<BlockStore> bs = std::make_shared<BlockStore>(opts);
+  std::shared_ptr<BlockStore> bs = std::make_shared<BlockStore>("oss", opts);
 
   std::vector<std::thread> actors;
   for (int i = 0; i < actors_count; ++i) {
@@ -56,7 +56,7 @@ TEST(BlockStoreTest, ConcurrentGetPutBlocks) {
   const int action_count = 100;
   BlockStoreOptions bs_opts;
   bs_opts.TOTAL_BLOCKS = 1000;
-  std::shared_ptr<BlockStore> bs = std::make_shared<BlockStore>(bs_opts);
+  std::shared_ptr<BlockStore> bs = std::make_shared<BlockStore>("oss", bs_opts);
   BufferManagerOptions bm_opts;
   bm_opts.TOTAL_BUFFERS = 110;
   std::unique_ptr<BufferManager> bm = std::make_unique<BufferManager>(bm_opts);
@@ -102,7 +102,7 @@ TEST(BlockStoreTest, ConcurrentReadWrite) {
   uint32_t num_threads = 5;
   uint32_t action_count = 50;
   std::vector<std::thread> threads;
-  BlockStore bs;
+  BlockStore bs("oss");
   BufferManager bm;
   
   for (uint32_t id = 0; id < num_threads; ++id) {

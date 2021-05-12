@@ -6,10 +6,10 @@ namespace morph {
 
 namespace mds {
 
-MetadataServiceImpl::MetadataServiceImpl(
-    std::shared_ptr<MonitorService::Stub> monitor,
-    std::shared_ptr<spdlog::logger> lg):
-    logger(lg), name_space(), monitor(monitor) {}
+MetadataServiceImpl::MetadataServiceImpl(const std::string &name,
+                                         const monitor::Config &monitor_config,
+                                         std::shared_ptr<spdlog::logger> lg):
+    logger(lg), name_space(name) {}
 
 grpc::Status MetadataServiceImpl::mkdir(ServerContext *context, 
     const MkdirRequest *request, MkdirReply *reply) {
@@ -28,7 +28,8 @@ grpc::Status MetadataServiceImpl::mkdir(ServerContext *context,
 }
 
 grpc::Status MetadataServiceImpl::opendir(ServerContext *context, 
-    const OpendirRequest *request, OpendirReply *reply) {
+                                          const OpendirRequest *request, 
+                                          OpendirReply *reply) {
   int ret_val;
 
   ret_val = name_space.opendir(request->uid(), 
@@ -39,7 +40,8 @@ grpc::Status MetadataServiceImpl::opendir(ServerContext *context,
 }
 
 grpc::Status MetadataServiceImpl::rmdir(ServerContext *context, 
-    const RmdirRequest *request, RmdirReply *reply) {
+                                        const RmdirRequest *request, 
+                                        RmdirReply *reply) {
   int ret_val;
 
   ret_val = name_space.rmdir(request->uid(), 
@@ -50,7 +52,8 @@ grpc::Status MetadataServiceImpl::rmdir(ServerContext *context,
 }
 
 grpc::Status MetadataServiceImpl::stat(ServerContext *context, 
-    const StatRequest *request, StatReply *reply) {
+                                       const StatRequest *request, 
+                                       StatReply *reply) {
   int ret_val;
   FileStat *stat = new mds_rpc::FileStat();
 
@@ -64,7 +67,8 @@ grpc::Status MetadataServiceImpl::stat(ServerContext *context,
 }
 
 grpc::Status MetadataServiceImpl::readdir(ServerContext *context, 
-    const ReaddirRequest *request, ReaddirReply *reply) {
+                                          const ReaddirRequest *request, 
+                                          ReaddirReply *reply) {
   int ret_val;
   DirEntry *dirent = new DirEntry();
 

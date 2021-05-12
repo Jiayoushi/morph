@@ -3,7 +3,8 @@
 
 #include <sys/types.h>
 #include <rpc/server.h>
-#include <common/options.h>
+
+#include "common/options.h"
 
 namespace morph {
 

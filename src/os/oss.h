@@ -5,7 +5,6 @@
 #include <spdlog/sinks/basic_file_sink.h>
 #include <grpcpp/grpcpp.h>
 
-
 #include "service_impl.h"
 #include "common/network.h"
 #include "monitor/config.h"
@@ -18,8 +17,10 @@ namespace oss {
 // to register the service.
 class ObjectStoreServer: NoCopy {
  public:
-  ObjectStoreServer(const NetworkAddress &this_addr, 
-    const monitor::Config &monitor_config);
+  ObjectStoreServer(const std::string &name,
+                    const NetworkAddress &this_addr, 
+                    const monitor::Config &monitor_config, 
+                    const ObjectStoreOptions &opts = ObjectStoreOptions());
 
   ~ObjectStoreServer();
 

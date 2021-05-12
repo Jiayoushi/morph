@@ -4,6 +4,7 @@
 #include <proto_out/oss.grpc.pb.h>
 #include <proto_out/monitor.grpc.pb.h>
 
+#include "monitor/config.h"
 #include "common/cluster.h"
 #include "object_store.h"
 
@@ -18,14 +19,16 @@ using GrpcOssService = oss_rpc::ObjectStoreService::Service;
 
 class ObjectStoreServiceImpl final: public GrpcOssService {
  public:
-  ObjectStoreServiceImpl(const NetworkAddress &addr,
-    const monitor::Config &monitor_config,
-    std::shared_ptr<spdlog::logger> logger);
+  explicit ObjectStoreServiceImpl(const std::string &name,
+                                  const NetworkAddress &addr,
+                                  const monitor::Config &monitor_config,
+                                  const ObjectStoreOptions &opts);
 
-  ~ObjectStoreServiceImpl() {}
+  ~ObjectStoreServiceImpl();
 
   grpc::Status put_object(ServerContext *context, 
-    const PutObjectRequest *request, PutObjectReply *reply) override;
+                          const PutObjectRequest *request, 
+                          PutObjectReply *reply) override;
 
   grpc::Status get_object(ServerContext *context, 
     const GetObjectRequest *request, GetObjectReply *reply) override;
@@ -48,14 +51,16 @@ class ObjectStoreServiceImpl final: public GrpcOssService {
 
   void add_this_oss_to_cluster();
 
-  const NetworkAddress &this_addr;
+  void remove_this_oss_from_cluster();
+
+  const NetworkAddress this_addr;
 
   ObjectStore object_store;
   
   MonitorStub *primary_monitor;
-  Cluster<MonitorStub> monitor_cluster;
+  Cluster<monitor_rpc::MonitorService> monitor_cluster;
 
-  Cluster<OssStub> oss_cluster;
+  Cluster<oss_rpc::ObjectStoreService> oss_cluster;
 };
 
 } // namespace oss

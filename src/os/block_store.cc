@@ -6,15 +6,16 @@
 #include <map>
 #include <iostream>
 #include <string.h>
-#include <common/utils.h>
+
+#include "common/env.h"
+#include "common/filename.h"
+#include "common/utils.h"
 
 namespace morph {
 
-BlockStore::BlockStore():
-    BlockStore(BlockStoreOptions()) 
-{}
-
-BlockStore::BlockStore(BlockStoreOptions o):
+BlockStore::BlockStore(const std::string &name,
+                       BlockStoreOptions o):
+    name(name),
     opts(o),
     running(true),
     num_in_progress(0),
@@ -26,7 +27,11 @@ BlockStore::BlockStore(BlockStoreOptions o):
     oflag |= O_TRUNC;
   }
 
-  fd = open(opts.STORE_FILE.c_str(), oflag);
+  if (!file_exists(name.c_str())) {
+    assert(create_directory(name).is_ok());
+  }
+
+  fd = open(block_store_file_name(name).c_str(), oflag);
   if (fd < 0) {
     perror("failed to open file to store data");
     assert(0);

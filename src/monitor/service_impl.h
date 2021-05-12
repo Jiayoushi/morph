@@ -35,9 +35,6 @@ class MonitorServiceImpl final: public monitor_rpc::MonitorService::Service {
     const RemoveOssRequest *request, RemoveOssReply *reply) override;
 
  private:
-  using MonitorStub = monitor_rpc::MonitorService::Stub;
-  using OssStub = oss_rpc::ObjectStoreService::Stub;
-
   const NetworkAddress &this_addr;
 
   std::shared_ptr<spdlog::logger> logger;
@@ -45,9 +42,9 @@ class MonitorServiceImpl final: public monitor_rpc::MonitorService::Service {
   //ClusterManager cluster_manager;
 
   bool is_primary_monitor;
-  Cluster<MonitorStub> monitor_cluster;
+  Cluster<monitor_rpc::MonitorService> monitor_cluster;
 
-  Cluster<OssStub> oss_cluster;
+  Cluster<oss_rpc::ObjectStoreService> oss_cluster;
 };
 
 }

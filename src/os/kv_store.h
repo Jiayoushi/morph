@@ -139,9 +139,8 @@ enum CF_INDEX {
 
 class KvStore {
  public:
-  KvStore() = delete;
-
-  KvStore(KvStoreOptions opts = KvStoreOptions());
+  KvStore(const std::string &name,
+          KvStoreOptions opts = KvStoreOptions());
 
   ~KvStore();
 
@@ -222,6 +221,8 @@ class KvStore {
     txn = std::make_shared<Transaction>(transaction_id++);
     return txn;
   }
+
+  const std::string name;
 
   KvStoreOptions opts;
 

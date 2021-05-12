@@ -14,7 +14,7 @@ TEST(NamespaceTest, BasicFileOperation) {
   using namespace mds_rpc;
   using namespace google::protobuf;
 
-  Namespace name_space;
+  Namespace name_space("mds");
   morph::Status s = name_space.open(create_test_logger("BasicFileOperation"));
   ASSERT_TRUE(s.is_ok());
 
@@ -76,7 +76,7 @@ TEST(NamespaceTest, RecoverFromLogFile) {
   std::string path;
   FileStat stat;
 
-  name_space = new Namespace();
+  name_space = new Namespace("mds");
   s = name_space->open(create_test_logger("RecoverFromLogFile1"));
   ASSERT_TRUE(s.is_ok());
   path.reserve(TOTAL_CREATE * 2);
@@ -93,7 +93,7 @@ TEST(NamespaceTest, RecoverFromLogFile) {
   delete name_space;
 
   path.clear();
-  name_space = new Namespace();
+  name_space = new Namespace("mds");
   s = name_space->open(create_test_logger("RecoverFromLogFile2"));
   ASSERT_TRUE(s.is_ok());
   for (uint32_t i = 0; i < TOTAL_CREATE; ++i) {
@@ -108,9 +108,7 @@ TEST(NamespaceTest, RecoverFromLogFile) {
 }
 
 } // namespace mds
-
 } // namespace test
-
 } // namespace morph
 
 int main(int argc, char *argv[]) {

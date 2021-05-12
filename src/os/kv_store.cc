@@ -7,14 +7,18 @@
 #include <iostream>
 #include <rocksdb/slice.h>
 #include <rocksdb/options.h>
-#include <common/utils.h>
-#include <common/options.h>
+
+#include "common/filename.h"
+#include "common/utils.h"
+#include "common/options.h"
 
 namespace morph {
 
 uint32_t Transaction::MAX_HANDLE = 0;
 
-KvStore::KvStore(KvStoreOptions opt):
+KvStore::KvStore(const std::string &na,
+                 KvStoreOptions opt):
+    name(na),
     opts(opt),
     running(true),
     written_txns(0),
@@ -44,25 +48,28 @@ void KvStore::init_db(const bool recovery) {
   options.IncreaseParallelism();
   options.OptimizeLevelStyleCompaction();
   options.create_if_missing = true;
-  options.wal_dir = opts.WAL_DIR;
+  options.wal_dir = kv_wal_file_name(name);
   options.manual_wal_flush = true;
 
+  const std::string kv_name = kv_db_file_name(name);
   if (recovery) {
     for (const auto &name: CF_NAMES) {
       column_families.push_back(ColumnFamilyDescriptor(
         name, ColumnFamilyOptions()));
     }
 
-    s = DB::Open(options, opts.ROCKSDB_FILE, column_families, &handles, &db);
+    s = DB::Open(options, kv_name, column_families, &handles, &db);
     if (!s.ok()) {
-      std::cerr << "Failed to open(0) rocksdb: " << opts.ROCKSDB_FILE << " " << s.ToString() << std::endl;
+      std::cerr << "Failed to open(0) rocksdb: " << kv_name 
+                << " " << s.ToString() << std::endl;
       exit(EXIT_FAILURE);
     }
 
   } else {
-    s = DB::Open(options, opts.ROCKSDB_FILE, &db);
+    s = DB::Open(options, kv_name, &db);
     if (!s.ok()) {
-      std::cerr << "Failed to open(1) rocksdb: " << opts.ROCKSDB_FILE << " " << s.ToString() << std::endl;
+      std::cerr << "Failed to open(1) rocksdb: " << kv_name 
+                << " " << s.ToString() << std::endl;
       exit(EXIT_FAILURE);
     }
 

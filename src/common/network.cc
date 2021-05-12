@@ -4,8 +4,6 @@
 
 namespace morph {
 
-namespace network {
-
 bool verify_network_address(const NetworkAddress &addr) {
   uint16_t numbers[5];   // [0].[1].[2].[3]:[4]
   int semicolon = 0, dot = 0;
@@ -37,7 +35,5 @@ bool verify_network_address(const NetworkAddress &addr) {
     && numbers[0] <= 255 && numbers[1] <= 255 && numbers[2] <= 255 
     && numbers[3] <= 255 && numbers[4] <= 65535;
 }
-
-} // namespace network
 
 } // namespace morph

@@ -8,11 +8,12 @@ namespace oss {
 
  // TODO(URGENT): how do we generate oss id? 
 ObjectStoreServiceImpl::ObjectStoreServiceImpl(
+    const std::string &name,
     const NetworkAddress &addr,
     const monitor::Config &monitor_config,
-    std::shared_ptr<spdlog::logger> logger):
+    const ObjectStoreOptions &opts):
     this_addr(addr),
-    object_store(0) {
+    object_store(name) {
   // Copy the monitor cluster config into this data structure
   assert(!monitor_config.addresses.empty());
   for (const NetworkAddress &addr: monitor_config.addresses) {
@@ -29,12 +30,19 @@ ObjectStoreServiceImpl::ObjectStoreServiceImpl(
   add_this_oss_to_cluster();
 }
 
+ObjectStoreServiceImpl::~ObjectStoreServiceImpl() {
+  remove_this_oss_from_cluster();
+}
+
 void ObjectStoreServiceImpl::add_this_oss_to_cluster() {
   monitor_rpc::AddOssRequest request;
   monitor_rpc::AddOssReply reply;
   grpc::ClientContext context;
   grpc::Status status;  
+  monitor_rpc::OssInfo *info = new monitor_rpc::OssInfo();
 
+  info->set_addr(this_addr);
+  request.set_allocated_info(info);
   status = primary_monitor->add_oss(&context, request, &reply);
 
   if (!status.ok()) {
@@ -43,7 +51,27 @@ void ObjectStoreServiceImpl::add_this_oss_to_cluster() {
     assert(false);
   }
 
-  assert(reply.ret_val());
+  assert(reply.ret_val() == S_SUCCESS);
+}
+
+void ObjectStoreServiceImpl::remove_this_oss_from_cluster() {
+  monitor_rpc::RemoveOssRequest request;
+  monitor_rpc::RemoveOssReply reply;
+  grpc::ClientContext context;
+  grpc::Status status;  
+  monitor_rpc::OssInfo *info = new monitor_rpc::OssInfo();
+
+  info->set_addr(this_addr);
+  request.set_allocated_info(info);
+  status = primary_monitor->remove_oss(&context, request, &reply);
+
+  if (!status.ok()) {
+    std::cerr << status.error_code() << ": " << status.error_message()
+              << std::endl;
+    assert(false);
+  }
+
+  assert(reply.ret_val() == S_SUCCESS);
 }
 
 grpc::Status ObjectStoreServiceImpl::put_object(ServerContext *context, 

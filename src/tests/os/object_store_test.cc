@@ -2,6 +2,12 @@
 #include <os/object_store.h>
 #include <tests/utils.h>
 
+#include "common/filename.h"
+
+
+namespace morph {
+namespace test {
+
 using morph::ObjectStore;
 using morph::ObjectStoreOptions;
 using morph::get_garbage;
@@ -14,6 +20,11 @@ using morph::delete_directory;
 // TODO: check the consistency when crash midway
 
 // TODO: check the integrity if data is corrupted
+
+std::string get_next_oss_name() {
+  static uint32_t val = 0;
+  return "oss" + std::to_string(++val);
+}
 
 struct ObjectUnit {
   std::string object_name;
@@ -180,42 +191,43 @@ TEST(ObjectStoreTest, ObjectExtent) {
 }
 
 TEST(ObjectStoreTest, BasicSmallReadWrite) {
-  ObjectStore os(1);
+  const std::string &name = get_next_oss_name();
+  ObjectStore os(name);
 
   object_random_read_write(os, "obj1", 20, 4096, 1);
 
-  cleanup(ObjectStoreOptions().kso.ROCKSDB_FILE, 
-    ObjectStoreOptions().kso.WAL_DIR);
+  delete_directory(name);
 }
 
 TEST(ObjectStoreTest, BasicSmallReadWrite2) {
-  ObjectStore os(1);
+  const std::string &name = get_next_oss_name();
+  ObjectStore os(name);
 
   object_random_read_write(os, "obj1", 20, 5678, 1);
 
-  cleanup(ObjectStoreOptions().kso.ROCKSDB_FILE, 
-    ObjectStoreOptions().kso.WAL_DIR);
+  delete_directory(name);
 }
 
 TEST(ObjectStoreTest, BasicSmallReadWrite3) {
   ObjectStoreOptions opts;
   opts.bso.TOTAL_BLOCKS = 32;
   opts.bmo.TOTAL_BUFFERS = 25;
-  ObjectStore os(1, opts);
+  const std::string &name = get_next_oss_name();
+  ObjectStore os(name, opts);
 
   object_random_read_write(os, "obj1", 20, 12378, 1);
 
-  cleanup(opts.kso.ROCKSDB_FILE, opts.kso.WAL_DIR);
+  delete_directory(name);
 }
 
 TEST(ObjectStoreTest, BasicLargeReadWrite) {
-  ObjectStoreOptions opts;
+  const std::string &name = get_next_oss_name();
+  ObjectStore os(name);
 
-  ObjectStore os(1, opts);
+  object_random_read_write(os, "obj1", 20, 1000000, 
+                           ObjectStoreOptions().cow_data_size);
 
-  object_random_read_write(os, "obj1", 20, 1000000, opts.cow_data_size);
-
-  cleanup(opts.kso.ROCKSDB_FILE, opts.kso.WAL_DIR);
+  delete_directory(name);
 }
 
 
@@ -223,7 +235,8 @@ TEST(ObjectStoreTest, ConcurrentSmallReadWrite) {
   ObjectStoreOptions opts;
   opts.bmo.TOTAL_BUFFERS = 100;
   opts.bso.TOTAL_BLOCKS = 320;
-  ObjectStore os(1, opts);
+  const std::string &name = get_next_oss_name();
+  ObjectStore os(name, opts);
   std::vector<std::thread> threads;
     
   for (int i = 0; i < 5; ++i) {
@@ -235,7 +248,7 @@ TEST(ObjectStoreTest, ConcurrentSmallReadWrite) {
     p.join();
   }
 
-  cleanup(opts.kso.ROCKSDB_FILE, opts.kso.WAL_DIR);
+  delete_directory(name);
 }
 
 // TODO: the sequential read speed is so slow that this test take minutes...
@@ -243,12 +256,14 @@ TEST(ObjectStoreTest, RecoverAfterSafeExit) {
   const uint32_t FILE_SIZE = 40960;
   std::vector<std::string> names;
   std::vector<std::string> contents;
+  const std::string &name = get_next_oss_name();
+
+  ObjectStoreOptions opts;
+  opts.bmo.TOTAL_BUFFERS = 8 * 10;
+  opts.bso.TOTAL_BLOCKS = FILE_SIZE / 8;
 
   {
-    ObjectStoreOptions opts;
-    opts.bmo.TOTAL_BUFFERS = 8 * 10;
-    opts.bso.TOTAL_BLOCKS = FILE_SIZE / 8;
-    ObjectStore os(1, opts);
+    ObjectStore os(name, opts);
     std::vector<std::thread> threads;
     
     for (int i = 0; i < 1; ++i) {
@@ -262,23 +277,21 @@ TEST(ObjectStoreTest, RecoverAfterSafeExit) {
     }
   }
 
-  ObjectStoreOptions opts;
   opts.recover = true;
   opts.bso.recover = true;
   opts.kso.recover = true;
-  opts.bmo.TOTAL_BUFFERS = 100;
-  opts.bso.TOTAL_BLOCKS = FILE_SIZE / 8;
-  ObjectStore os(1, opts);
+  ObjectStore os_r(name, opts);
 
   for (int i = 0; i < 1; ++i) {
-    object_sequential_read(os, names[i], contents[i]);
+    object_sequential_read(os_r, names[i], contents[i]);
   }
 
-  cleanup(opts.kso.ROCKSDB_FILE, opts.kso.WAL_DIR);
+  delete_directory(name);
 }
 
 TEST(ObjectStoreTest, BasicObjectMetadataOperations) {
-  ObjectStore os(1);
+  const std::string &name = get_next_oss_name();
+  ObjectStore os(name);
   int ret_val;
   std::string buf;
 
@@ -307,14 +320,14 @@ TEST(ObjectStoreTest, BasicObjectMetadataOperations) {
   ret_val = os.delete_metadata("obj", "not_nice");
   ASSERT_EQ(ret_val, 0);
 
-  cleanup(ObjectStoreOptions().kso.ROCKSDB_FILE, 
-    ObjectStoreOptions().kso.WAL_DIR);
+  delete_directory(name);
 }
 
 TEST(ObjectStoreTest, ConcurrentGetPutMetadata) {
   const uint8_t NUM_THREADS = 10;
   const uint8_t NUM_ATTRIBUTES = 100;
-  ObjectStore os(1);
+  const std::string &name = get_next_oss_name();
+  ObjectStore os(name);
   std::vector<std::thread> threads;
 
   for (uint8_t t = 0; t < NUM_THREADS; ++t) {
@@ -347,9 +360,11 @@ TEST(ObjectStoreTest, ConcurrentGetPutMetadata) {
     t.join();
   }
 
-  cleanup(ObjectStoreOptions().kso.ROCKSDB_FILE, 
-    ObjectStoreOptions().kso.WAL_DIR);
+  delete_directory(name);
 }
+
+} // namespace test
+} // namespace morph
 
 int main(int argc, char *argv[]) {
   ::testing::InitGoogleTest(&argc, argv);

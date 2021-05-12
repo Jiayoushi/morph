@@ -34,7 +34,8 @@ struct Namespace::Writer {
   std::condition_variable cv;
 };
 
-Namespace::Namespace():
+Namespace::Namespace(const std::string &name):
+  name(name),
   root(nullptr),
   next_inode_number(FIRST_INODE_NUMBER),
   logged_batch_size(0), logfile_number(FIRST_LOG_FILE_NUMBER), 
@@ -43,19 +44,22 @@ Namespace::Namespace():
 Status Namespace::open(std::shared_ptr<spdlog::logger> logger) {
   Status s;
 
-  // Try to recover if "mds" directory exists
-  if (file_exists("mds")) {
+  // Try to recover if directory exists
+  if (file_exists(name.c_str())) {
     s = recover();
     if (!s.is_ok()) {
       return s;
     }
   } else {
-    create_directory("mds");
+    s = create_directory(name.c_str());
+    if (!s.is_ok()) {
+      return s;
+    }
     root = allocate_inode<InodeDirectory>(INODE_TYPE::DIRECTORY, 0, 0);
   }
 
   WritableFile *lfile;
-  s = new_writable_file(log_file_name("mds", logfile_number), &lfile);
+  s = new_writable_file(log_file_name(name.c_str(), logfile_number), &lfile);
   if (s.is_ok()) {
     logfile = lfile;
     log = new log::Writer(logfile);
@@ -88,7 +92,7 @@ Status Namespace::recover() {
     }
   }
 
-  // Read all metadata from remote ods.
+  // TODO: Read all metadata from remote ods.
 
   return s;
 }
@@ -113,7 +117,7 @@ Status Namespace::sync_log_to_oss(const std::string &name) {
     WriteBatchInternal::set_contents(&batch, record);
   }
 
-  // Delete this log file
+  // TOOD: Delete this log file
 
   return s;
 }

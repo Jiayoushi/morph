@@ -25,7 +25,7 @@ namespace mds {
 // TODO: don't use the shared_ptr for inode
 class Namespace: NoCopy {
  public:
-  Namespace();
+  Namespace(const std::string &name);
 
   Status open(std::shared_ptr<spdlog::logger> logger);
 
@@ -78,6 +78,8 @@ class Namespace: NoCopy {
 
   Status sync_log_to_oss(const std::string &file);
 
+
+  const std::string name;
 
   std::shared_ptr<spdlog::logger> logger;
 

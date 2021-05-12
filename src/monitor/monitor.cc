@@ -1,22 +1,18 @@
 #include "monitor.h"
 
 #include "common/options.h"
+#include "common/filename.h"
+#include "common/logger.h"
 
 namespace morph {
 
 namespace monitor {
 
-Monitor::Monitor(const std::string &monitor_addr) {
-  try {
-    std::string filepath = LOGGING_DIRECTORY + "/monitor_" + monitor_addr;
-    logger = spdlog::basic_logger_mt(
-      "monitor_" + monitor_addr + std::to_string(rand()), filepath, true);
-    logger->set_level(LOGGING_LEVEL);
-    logger->flush_on(FLUSH_LEVEL);
-  } catch (const spdlog::spdlog_ex &ex) {
-    std::cerr << "monitor server Log init failed: " << ex.what() << std::endl;
-    exit(EXIT_FAILURE);
-  }
+Monitor::Monitor(const std::string &name, const std::string &monitor_addr):
+    name(name) {
+  logger = init_logger(name);
+  assert(logger != nullptr);
+
   logger->debug("logger initialized");
   
   service = std::make_unique<MonitorServiceImpl>(monitor_addr, logger);

@@ -30,24 +30,25 @@ class ObjectStore {
  public:
   ObjectStore() = delete;
 
-  ObjectStore(uint32_t id, ObjectStoreOptions oso = ObjectStoreOptions());
+  explicit ObjectStore(const std::string &name, 
+              ObjectStoreOptions oso = ObjectStoreOptions());
 
   ~ObjectStore();
 
   int put_object(const std::string &object_name, const uint32_t offset, 
-    const std::string &body);
+                 const std::string &body);
 
   int get_object(const std::string &object_name, std::string *buf, 
-    const uint32_t offset, const uint32_t size);
+                 const uint32_t offset, const uint32_t size);
 
   int put_metadata(const std::string &object_name, 
-    const std::string &attribute, const std::string &value);
+                   const std::string &attribute, const std::string &value);
 
   int get_metadata(const std::string &object_name,
-    const std::string &attribute, std::string *buf);
+                   const std::string &attribute, std::string *buf);
 
   int delete_metadata(const std::string &object_name,
-    const std::string &attribute);
+                      const std::string &attribute);
 
   const ObjectStoreOptions opts;
 
@@ -59,19 +60,21 @@ class ObjectStore {
   std::shared_ptr<Object> allocate_object(const std::string &name);
 
   void object_write(std::shared_ptr<Object> object, 
-    const std::string &object_name, const uint32_t offset, 
-    const std::string &data);
+                    const std::string &object_name, const uint32_t offset, 
+                    const std::string &data);
 
   void object_large_write(std::shared_ptr<Object> object, 
-    const std::string &object_name, const uint32_t offset, 
-    const std::string &data);
+                          const std::string &object_name, 
+                          const uint32_t offset, const std::string &data);
 
-  void object_small_write(std::shared_ptr<Object> object, 
-    const std::string &object_name, const uint32_t offset, 
-    const std::string &data);
+    void object_small_write(std::shared_ptr<Object> object, 
+                            const std::string &object_name, 
+                            const uint32_t offset, 
+                            const std::string &data);
 
-  Buffer * get_block(std::shared_ptr<Object> object, lbn_t lbn, 
-    lbn_t lbn_end = 0, bool create = false, uint32_t new_blocks = 0);
+    Buffer * get_block(std::shared_ptr<Object> object, lbn_t lbn, 
+                      lbn_t lbn_end = 0, bool create = false, 
+                      uint32_t new_blocks = 0);
 
   /*
    * Copies the data in "data_ptr" to buffer.
@@ -84,20 +87,22 @@ class ObjectStore {
    *   how many bytes are copied to the buffer.
    */
   uint32_t write_buffer(const std::shared_ptr<Object> &object, 
-      Buffer * buffer, const char *data_ptr, 
-      uint32_t buf_offset, uint32_t size, bool set_flags = true);
+                        Buffer *buffer, const char *data_ptr, 
+                        uint32_t buf_offset, uint32_t size, 
+                        bool set_flags = true);
 
 
   /*
    * Copies the data from block located at "file_off" to "new_buffer".
    */
   size_t cow_write_buffer(const std::shared_ptr<Object> &object,
-      const uint32_t file_off, Buffer *new_buffer,
-      uint32_t buf_off, size_t write_size, const char *data_ptr);
+                          const uint32_t file_off, Buffer *new_buffer,
+                          uint32_t buf_off, size_t write_size, 
+                          const char *data_ptr);
 
   void log_write(const std::shared_ptr<Object> &object, 
-    const std::string &object_name, IoRequest *request, 
-    std::string data, uint32_t offset, bool bitmap_modified);
+                 const std::string &object_name, IoRequest *request, 
+                 std::string data, uint32_t offset, bool bitmap_modified);
 
   void persist_metadata();
 
@@ -109,12 +114,12 @@ class ObjectStore {
   }
 
   void after_write(const std::shared_ptr<Object> &object, 
-    IoRequest *request, bool finished);
+                   IoRequest *request, bool finished);
 
   void after_read(IoRequest *request, bool finished);
 
   void read_buffer(const std::shared_ptr<Object> &object, 
-    Buffer *buffer);
+                   Buffer *buffer);
 
   // Read the metadata and replay the data log after restart or crash
   void recover();
@@ -124,15 +129,16 @@ class ObjectStore {
   }
 
   // 0000000....00145-object_sara-138
-  std::string get_data_key(uint32_t transaction_id, const std::string &object_name, 
-      uint32_t offset) {
+  std::string get_data_key(uint32_t transaction_id, 
+                           const std::string &object_name, 
+                           uint32_t offset) {
     char buf[512];
     sprintf(buf, "%032d-%s-%u", transaction_id, object_name.c_str(), offset);
     return std::string(buf);
   }
 
   std::string get_object_metadata_key(const std::string &object_name,
-      const std::string &attribute) {
+                                      const std::string &attribute) {
     return object_name + "-" + attribute;
   }
 
@@ -169,6 +175,8 @@ class ObjectStore {
     delete request;
   }
 
+  std::string name;
+
   std::atomic<bool> running;
 
   BlockStore block_store;
@@ -182,8 +190,6 @@ class ObjectStore {
   std::unordered_map<std::string, std::shared_ptr<Object>> index;
 
   std::shared_ptr<spdlog::logger> logger;
-
-  uint32_t id;
 
   std::atomic<uint32_t> unfinished_writes;
 

@@ -44,6 +44,9 @@ class Cluster {
 
   // Simply add the instance without establishing the connection
   ErrorCode add_instance(const NetworkAddress &addr) {
+    if (!verify_network_address(addr)) {
+      return S_ADDR_INVALID;
+    }
     if (stub_map.find(addr) != stub_map.end()) {
       return S_EXISTS;
     }
@@ -52,6 +55,9 @@ class Cluster {
   }
 
   ErrorCode remove_instance(const NetworkAddress &addr) {
+    if (!verify_network_address(addr)) {
+      return S_ADDR_INVALID;
+    }
     if (stub_map.find(addr) == stub_map.end()) {
       return S_NOT_FOUND;
     }
@@ -106,7 +112,7 @@ ErrorCode Cluster<Service>::connect_to(const NetworkAddress &addr) {
 
   std::shared_ptr<grpc::Channel> ch = 
     grpc::CreateChannel(addr, InsecureChannelCredentials());
-  instance->second = Service::NewStub(ch);
+  instance->second = Service::NewStub(ch).release();
 
   return S_SUCCESS;
 }

@@ -15,7 +15,7 @@ namespace monitor {
 
 class Monitor: NoCopy {
  public:
-  Monitor(const NetworkAddress &monitor_addr);
+  Monitor(const std::string &name, const NetworkAddress &monitor_addr);
 
   ~Monitor();
 
@@ -24,6 +24,8 @@ class Monitor: NoCopy {
   }
 
  private:
+  const std::string name;
+
   std::shared_ptr<spdlog::logger> logger;
 
   std::unique_ptr<MonitorServiceImpl> service;

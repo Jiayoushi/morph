@@ -1,33 +1,27 @@
 #include <os/object_store.h>
 
 #include <cassert>
-#include <common/utils.h>
 #include <spdlog/fmt/bundled/printf.h>
+
+#include "common/utils.h"
+#include "common/filename.h"
+#include "common/logger.h"
 
 namespace morph {
 
-ObjectStore::ObjectStore(uint32_t idp, ObjectStoreOptions oso):
+ObjectStore::ObjectStore(const std::string &name, ObjectStoreOptions oso):
+    name(name),
     opts(oso),
-    block_store(opts.bso),
-    kv_store(opts.kso),
+    block_store(name, opts.bso),
+    kv_store(name, opts.kso),
     buffer_manager(oso.bmo),
-    id(idp),
     unfinished_writes(0),
     unfinished_reads(0),
     running(true),
     request_id(0) {
 
-  try {
-    std::string filepath = LOGGING_DIRECTORY + "/oss_" + std::to_string(idp);
-    logger = spdlog::basic_logger_mt("oss_" + std::to_string(idp) + 
-      std::to_string(rand()), filepath, true);
-    logger->set_level(LOGGING_LEVEL);
-    logger->flush_on(FLUSH_LEVEL);
-  } catch (const spdlog::spdlog_ex &ex) {
-    std::cerr << "Object storage service log init failed: " << ex.what() 
-      << std::endl;
-    assert(0);
-  }
+  logger = init_logger(name);
+  assert(logger != nullptr);
 
   logger->debug("logger initialized");
 
@@ -37,7 +31,6 @@ ObjectStore::ObjectStore(uint32_t idp, ObjectStoreOptions oso):
 }
 
 ObjectStore::~ObjectStore() {
-  //fprintf(stderr, "~ObjectStore()\n");
   if (running) {
     stop();
   }

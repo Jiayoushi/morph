@@ -10,11 +10,12 @@
 #include <bitset>
 #include <mutex>
 #include <condition_variable>
-#include <common/types.h>
-#include <common/blocking_queue.h>
 #include <os/buffer.h>
 #include <os/block_allocator.h>
 #include <rpc/msgpack.hpp>
+
+#include "common/types.h"
+#include "common/blocking_queue.h"
 
 namespace morph {
 
@@ -81,9 +82,8 @@ class IoRequest: NoCopy {
 
 class BlockStore: NoCopy {
  public:
-  BlockStore();
-
-  BlockStore(BlockStoreOptions o);
+  BlockStore(const std::string &name, 
+             BlockStoreOptions o = BlockStoreOptions());
 
   ~BlockStore();
 
@@ -121,6 +121,8 @@ class BlockStore: NoCopy {
   void submit_read(IoRequest *request, struct iocb *iocb); 
 
   void reap_routine();
+
+  const std::string name;
 
   int fd;
 

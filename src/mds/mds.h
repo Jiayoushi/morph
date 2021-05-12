@@ -17,8 +17,9 @@ namespace mds {
 
 class MetadataServer: NoCopy {
  public:
-  MetadataServer(const NetworkAddress &mds_addr, 
-    const monitor::Config &monitor_config);
+  MetadataServer(const std::string &name,
+                 const NetworkAddress &mds_addr, 
+                 const monitor::Config &monitor_config);
 
   ~MetadataServer();
 
@@ -27,6 +28,8 @@ class MetadataServer: NoCopy {
   }
 
  private:
+  const std::string name;
+
   std::shared_ptr<spdlog::logger> logger;
 
   std::unique_ptr<MetadataServiceImpl> service;

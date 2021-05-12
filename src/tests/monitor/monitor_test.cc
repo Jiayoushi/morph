@@ -17,7 +17,7 @@ TEST(Monitor, BasicOperation) {
   using NetAddrSet = std::unordered_set<NetworkAddress>;
 
   NetworkAddress address("0.0.0.0:5000");
-  monitor::Monitor monitor(address);
+  monitor::Monitor monitor("monitor", address);
   grpc::Status s;
   uint64_t version = INITIAL_CLUSTER_VERSION;
   AddOssRequest add_oss_request;

@@ -22,8 +22,9 @@ const uint8_t JOURNAL_TRANSACTION_CLOSE_INTERVAL = 1;
 const uint8_t JOURNAL_TRANSACTION_SYNC_INTERVAL  = 1;
 
 
-// TODO: actually this should be named as config, not as options.
-//   since you do not modify those during runtime.
+// TODO: should this be renmaed to config?
+// TODO: recovery should happen automaticlaly when the "name" directory exists
+//       instead of using a boolean.
 
 struct BlockStoreOptions {
   bool recover = false;
@@ -32,7 +33,8 @@ struct BlockStoreOptions {
   uint8_t ALLOCATE_RETRY = 3;
   uint32_t min_num_event = 1;
   int max_num_event = 100;
-  std::string STORE_FILE = "/media/jyshi/abcde/blocks";
+
+  BlockStoreOptions() {}
 };
 
 struct BufferManagerOptions {
@@ -43,14 +45,13 @@ struct BufferManagerOptions {
 struct KvStoreOptions {
   bool recover = false;
   uint32_t MAX_TXN_HANDLES = 3;
-  std::string ROCKSDB_FILE = "/media/jyshi/abcde/rocks";
-  std::string WAL_DIR = "/media/jyshi/abcde/wal_dir";
+
+  KvStoreOptions() {}
 };
 
 struct ObjectStoreOptions {
   bool recover = false;
 
-  // When the write size is >= cow_data_size, use cow
   uint32_t cow_data_size = 16384;
 
   BlockStoreOptions bso;
@@ -60,9 +61,7 @@ struct ObjectStoreOptions {
   KvStoreOptions kso;
 
   ObjectStoreOptions():
-    bso(),
-    bmo(),
-    kso()
+    bso(), bmo(), kso()
   {}
 };
 
