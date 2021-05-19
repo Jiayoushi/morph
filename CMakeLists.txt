@@ -43,6 +43,9 @@ FILE(GLOB MDS_SRC_FILES src/mds/*.cc)
 FILE(GLOB OS_SRC_FILES src/os/*.cc)
 FILE(GLOB MONITOR_SRC_FILES src/monitor/*.cc)
 
+add_executable(common_test
+  ${COMMON_SRC_FILES}
+  src/tests/common/consistent_hash_test.cc)
 add_executable(namespace_test
   ${COMMON_SRC_FILES}
   ${MDS_SRC_FILES}
@@ -136,3 +139,5 @@ target_link_libraries(third_party_test
   /usr/lib/x86_64-linux-gnu/liblz4.so.1
   /usr/lib/x86_64-linux-gnu/libdl.so
   /usr/lib/x86_64-linux-gnu/libz.so)
+target_link_libraries(common_test
+  gtest)

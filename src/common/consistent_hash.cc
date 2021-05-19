@@ -23,31 +23,20 @@ long hash_string(const char *key) {
 
 std::vector<std::string> assign_group(const std::vector<std::string> &buckets,
                                       const std::string &item, const int size) {
-  std::map<size_t, std::string> sorted_hash_vals;
+  std::vector<std::string> sorted_buckets;
   std::vector<std::string> result;
 
   assert(!buckets.empty());
   assert(size <= buckets.size());
 
-  for (int i = 0; i < buckets.size(); ++i) {
-    long hash_val = hash_string(buckets[i].c_str());
-    sorted_hash_vals.insert({hash_val, buckets[i]});
-  }
+  sorted_buckets = buckets;
+  std::sort(sorted_buckets.begin(), sorted_buckets.end());
 
   long hash_val = hash_string(item.c_str());
-  auto p = sorted_hash_vals.lower_bound(hash_val);
-
+  int index = hash_val % sorted_buckets.size();
   for (int i = 0; i < size; ++i) {
-    while (true) {
-       if (p == sorted_hash_vals.end()) {
-        p = sorted_hash_vals.begin();
-      }
-      if (std::find(result.begin(), result.end(), p->second) == end(result)) {
-        break;
-      }
-      ++p;
-    }
-    result.push_back(p->second);
+    result.push_back(sorted_buckets[index]);
+    index = (index + 1) % sorted_buckets.size();
   }
 
   assert(result.size() == size);
