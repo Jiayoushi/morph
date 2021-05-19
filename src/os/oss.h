@@ -11,7 +11,7 @@
 
 namespace morph {
 
-namespace oss {
+namespace os {
 
 // The server class is required since grpc requires a server instance
 // to register the service.
@@ -35,7 +35,7 @@ class ObjectStoreServer: NoCopy {
   std::unique_ptr<grpc::Server> server;
 };
 
-} // namespace mds
+} // namespace os
 
 } // namespace morph
 

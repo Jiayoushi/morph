@@ -13,6 +13,8 @@
 
 namespace morph {
 
+namespace os {
+
 struct Transaction;
 
 enum LogType {
@@ -251,8 +253,8 @@ class KvStore {
   std::unique_ptr<std::thread> close_thread;
 };
 
+} // namespace os
 
-
-}
+} // namespace morph
 
 #endif

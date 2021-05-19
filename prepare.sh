@@ -15,6 +15,12 @@ protoc src/tests/rpc/math.proto \
        --cpp_out=$out           \
        --plugin=protoc-gen-grpc=/home/jyshi/.local/bin/grpc_cpp_plugin
 
+protoc src/protos/monitor.proto \
+       -I src/protos       \
+       --grpc_out=$out     \
+       --cpp_out=$out      \
+       --plugin=protoc-gen-grpc=/home/jyshi/.local/bin/grpc_cpp_plugin
+
 protoc src/protos/mds.proto \
        -I src/protos       \
        --grpc_out=$out     \
@@ -22,12 +28,6 @@ protoc src/protos/mds.proto \
        --plugin=protoc-gen-grpc=/home/jyshi/.local/bin/grpc_cpp_plugin
 
 protoc src/protos/oss.proto \
-       -I src/protos       \
-       --grpc_out=$out     \
-       --cpp_out=$out      \
-       --plugin=protoc-gen-grpc=/home/jyshi/.local/bin/grpc_cpp_plugin
-
-protoc src/protos/monitor.proto \
        -I src/protos       \
        --grpc_out=$out     \
        --cpp_out=$out      \

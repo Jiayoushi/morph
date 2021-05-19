@@ -8,8 +8,6 @@ service MetadataService {
   rpc rmdir(RmdirRequest) returns (RmdirReply) {};
   rpc stat (StatRequest) returns (StatReply) {};
   rpc readdir (ReaddirRequest) returns (ReaddirReply) {};
-
-  rpc update_oss_cluster(UpdateOssClusterRequest) returns (UpdateOssClusterReply) {};
 }
 
 
@@ -31,7 +29,6 @@ message DirEntry {
   uint32 type = 2;
   bytes name = 3;
 }
-
 
 
 message MkdirRequest {
@@ -85,12 +82,4 @@ message ReaddirRequest {
 message ReaddirReply {
   int32 ret_val = 1;
   DirEntry entry = 2;
-}
-
-message UpdateOssClusterRequest {
-  
-}
-
-message UpdateOssClusterReply {
-  int32 ret_val = 1;
 }

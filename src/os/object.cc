@@ -3,6 +3,8 @@
 
 namespace morph {
 
+namespace os {
+
 bool Object::search_extent(uint32_t file_off, Extent *ext) {
   std::vector<Extent> res;
   EXTENT_TREE_ITER iter;
@@ -108,5 +110,6 @@ std::vector<std::pair<lbn_t, uint32_t>> Object::delete_extent_range(
   return remove_blocks;
 }
 
+} // namespace os
 
-}
+} // namespace morph

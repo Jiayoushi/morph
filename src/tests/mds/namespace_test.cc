@@ -66,6 +66,7 @@ TEST(NamespaceTest, BasicFileOperation) {
   ASSERT_EQ(name_space.rmdir(0, "/nice"), 0);
 }
 
+/*
 TEST(NamespaceTest, RecoverFromLogFile) {
   using namespace morph::mds;
   using namespace mds_rpc;
@@ -105,7 +106,7 @@ TEST(NamespaceTest, RecoverFromLogFile) {
   }
 
   delete name_space;
-}
+}*/
 
 } // namespace mds
 } // namespace test

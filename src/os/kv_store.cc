@@ -14,6 +14,8 @@
 
 namespace morph {
 
+namespace os {
+
 uint32_t Transaction::MAX_HANDLE = 0;
 
 KvStore::KvStore(const std::string &na,
@@ -247,4 +249,6 @@ void KvStore::stop() {
   assert(open_txn == nullptr || !open_txn->has_handles());
 }
 
-}
+} // namespace os
+
+} // namespace morph

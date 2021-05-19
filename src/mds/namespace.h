@@ -15,7 +15,7 @@
 #include "common/env.h"
 #include "write_batch.h"
 #include "log_writer.h"
-#include "inode.h"
+#include "inode_directory.h"
 
 namespace morph {
 
@@ -45,8 +45,6 @@ class Namespace: NoCopy {
   int rmdir(uid_t, const char *pathname);
 
  private:
-  struct Writer;
-
   std::vector<std::string> get_pathname_components(
     const std::string &pathname);
 
@@ -66,6 +64,10 @@ class Namespace: NoCopy {
 
   void remove_inode(InodeNumber ino);
 
+  
+
+  struct Writer;
+
   Status write_to_log(bool sync, WriteBatch *batch);
 
   Status make_room_for_log_write();
@@ -77,6 +79,7 @@ class Namespace: NoCopy {
   Status recover();
 
   Status sync_log_to_oss(const std::string &file);
+
 
 
   const std::string name;

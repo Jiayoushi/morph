@@ -13,18 +13,7 @@
 
 namespace morph {
 
-enum ObjectOperationErrorCode {
-  OPERATION_SUCCESS = 0,
-
-  OBJECT_NOT_FOUND = 1,
-
-  // Read parts of an object that has no written content
-  NO_CONTENT = 2,
-
-  OBJECT_NAME_INVALID = 3,
-
-  METADATA_NOT_FOUND = 4
-};
+namespace os {
 
 class ObjectStore {
  public:
@@ -36,7 +25,8 @@ class ObjectStore {
   ~ObjectStore();
 
   int put_object(const std::string &object_name, const uint32_t offset, 
-                 const std::string &body);
+                 const std::string &body, 
+                 std::function<void(void)> on_apply=nullptr);
 
   int get_object(const std::string &object_name, std::string *buf, 
                  const uint32_t offset, const uint32_t size);
@@ -61,16 +51,19 @@ class ObjectStore {
 
   void object_write(std::shared_ptr<Object> object, 
                     const std::string &object_name, const uint32_t offset, 
-                    const std::string &data);
+                    const std::string &data, 
+                    std::function<void(void)> on_apply);
 
   void object_large_write(std::shared_ptr<Object> object, 
                           const std::string &object_name, 
-                          const uint32_t offset, const std::string &data);
+                          const uint32_t offset, const std::string &data,
+                          std::function<void(void)> on_apply);
 
     void object_small_write(std::shared_ptr<Object> object, 
                             const std::string &object_name, 
                             const uint32_t offset, 
-                            const std::string &data);
+                            const std::string &data,
+                            std::function<void(void)> on_apply);
 
     Buffer * get_block(std::shared_ptr<Object> object, lbn_t lbn, 
                       lbn_t lbn_end = 0, bool create = false, 
@@ -198,6 +191,8 @@ class ObjectStore {
   uint64_t request_id;
 };
 
-}
+} // namespace os
+
+} // namespace morph
 
 #endif

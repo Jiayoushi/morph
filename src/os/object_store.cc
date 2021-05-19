@@ -6,8 +6,11 @@
 #include "common/utils.h"
 #include "common/filename.h"
 #include "common/logger.h"
+#include "error_code.h"
 
 namespace morph {
+
+namespace os {
 
 ObjectStore::ObjectStore(const std::string &name, ObjectStoreOptions oso):
     name(name),
@@ -108,12 +111,14 @@ std::shared_ptr<Object> ObjectStore::search_object(const std::string &name,
 }
 
 
-int ObjectStore::put_object(const std::string &object_name, const uint32_t offset, 
-    const std::string &data) {
+int ObjectStore::put_object(const std::string &object_name, 
+                            const uint32_t offset, 
+                            const std::string &data, 
+                            std::function<void(void)> on_apply) {
   std::shared_ptr<Object> object;
 
   if (object_name.empty()) {
-    return OBJECT_NAME_INVALID;
+    return os::OBJECT_NAME_INVALID;
   }
 
   object = search_object(object_name, true);
@@ -122,7 +127,7 @@ int ObjectStore::put_object(const std::string &object_name, const uint32_t offse
     object_name.c_str(), offset, data.size()));
 
   if (!data.empty()) {
-    object_write(object, object_name, offset, data);
+    object_write(object, object_name, offset, data, on_apply);
   }
 
   logger->debug(fmt::sprintf("[ObjectStore] put_object: object_name(%s) offset(%d): success\n",
@@ -131,6 +136,8 @@ int ObjectStore::put_object(const std::string &object_name, const uint32_t offse
   return 0;
 }
 
+
+// TODO: it should be deleted??
 // rmw part
 // cow part
 // in the same io request
@@ -138,20 +145,24 @@ int ObjectStore::put_object(const std::string &object_name, const uint32_t offse
 // then after all data are written, time to change and log the metadata
 // after the metadata are logged, 
 void ObjectStore::object_write(std::shared_ptr<Object> object, 
-    const std::string &object_name, const uint32_t offset, 
-    const std::string &data) {
+                               const std::string &object_name, 
+                               const uint32_t offset, 
+                               const std::string &data, 
+                               std::function<void(void)> on_apply) {
   std::lock_guard<std::mutex> lock(object->mutex);
 
   if (data.size() >= opts.cow_data_size) {
-    object_large_write(object, object_name, offset, data);
+    object_large_write(object, object_name, offset, data, on_apply);
   } else {
-    object_small_write(object, object_name, offset, data);
+    object_small_write(object, object_name, offset, data, on_apply);
   }
 }
 
 void ObjectStore::object_large_write(std::shared_ptr<Object> object, 
-    const std::string &object_name, const uint32_t offset, 
-    const std::string &data) {
+                                     const std::string &object_name, 
+                                     const uint32_t offset, 
+                                     const std::string &data, 
+                                     std::function<void(void)> on_apply) {
   using NewBufferList = typename std::list<Buffer *>;
 
   const uint32_t start_off = offset / opts.bso.block_size,
@@ -214,15 +225,19 @@ void ObjectStore::object_large_write(std::shared_ptr<Object> object,
   request->after_complete_callback = 
       [this, object, request,
       bitmap = std::move(bitmap), 
-      object_meta = std::move(object_meta)] () mutable {
+      object_meta = std::move(object_meta),
+      on_apply] () mutable {
     std::shared_ptr<LogHandle> handle;
 
     handle = kv_store.start_transaction();
 
     this->after_write(object, request, false);
 
-    handle->post_log_callback = [this, request]() {
+    handle->post_log_callback = [this, request, on_apply]() {
       end_request(request);
+      if (on_apply) {
+        on_apply();
+      }
     };
 
     handle->log(LOG_SYS_META, "system-bitmap", std::move(bitmap));
@@ -238,8 +253,10 @@ void ObjectStore::object_large_write(std::shared_ptr<Object> object,
 }
 
 void ObjectStore::object_small_write(std::shared_ptr<Object> object, 
-    const std::string &object_name, 
-    const uint32_t offset, const std::string &data) {
+                                     const std::string &object_name, 
+                                     const uint32_t offset, 
+                                     const std::string &data,
+                                     std::function<void(void)> on_apply) {
   const lbn_t lbn_start = offset / opts.bso.block_size;
   const lbn_t lbn_end = (offset + data.size()) / opts.bso.block_size;
   Buffer * buffer;
@@ -249,8 +266,13 @@ void ObjectStore::object_small_write(std::shared_ptr<Object> object,
   const char *data_ptr = data.c_str();
   IoRequest *request = start_request(OP_WRITE);
 
-  request->after_complete_callback = std::bind(&ObjectStore::after_write, 
-      this, object, request, true);
+  request->after_complete_callback = 
+    [this, object, request, on_apply]() {
+      after_write(object, request, true);
+      if (on_apply) {
+        on_apply();
+      }
+    };
 
   for (lbn_t lbn = lbn_start; 
        lbn <= lbn_end; 
@@ -287,9 +309,9 @@ void ObjectStore::object_small_write(std::shared_ptr<Object> object,
 }
 
 void ObjectStore::log_write(const std::shared_ptr<Object> &object, 
-    const std::string &object_name, 
-    IoRequest *request, std::string data, 
-    uint32_t offset, bool bitmap_modified) {
+                            const std::string &object_name, 
+                            IoRequest *request, std::string data, 
+                            uint32_t offset, bool bitmap_modified) {
   std::shared_ptr<LogHandle> handle;
 
   handle = kv_store.start_transaction();
@@ -318,7 +340,9 @@ void ObjectStore::log_write(const std::shared_ptr<Object> &object,
 }
 
 Buffer * ObjectStore::get_block(std::shared_ptr<Object> object, 
-    uint32_t target, uint32_t target_end, bool create, uint32_t new_blocks) {
+                                uint32_t target, 
+                                uint32_t target_end, bool create, 
+                                uint32_t new_blocks) {
   Buffer *buffer;
   Extent extent;
   uint32_t count;    /* How many blocks to allcoate if ncessary */
@@ -354,9 +378,9 @@ Buffer * ObjectStore::get_block(std::shared_ptr<Object> object,
 }
 
 uint32_t ObjectStore::write_buffer(const std::shared_ptr<Object> &object, 
-    Buffer *buffer, const char *data_ptr, uint32_t buf_offset,
-    uint32_t size, bool update_flags) {
-
+                                   Buffer *buffer, const char *data_ptr, 
+                                   uint32_t buf_offset,
+                                   uint32_t size, bool update_flags) {
   if (!is_block_aligned(size) && !flag_marked(buffer, B_NEW)) {
     read_buffer(object, buffer);
   }
@@ -376,8 +400,10 @@ uint32_t ObjectStore::write_buffer(const std::shared_ptr<Object> &object,
 }
 
 size_t ObjectStore::cow_write_buffer(const std::shared_ptr<Object> &object,
-    const uint32_t file_off, Buffer *dst_buffer,
-    uint32_t buf_off, size_t write_size, const char *data_ptr) {
+                                     const uint32_t file_off, 
+                                     Buffer *dst_buffer,
+                                     uint32_t buf_off, size_t write_size, 
+                                     const char *data_ptr) {
   Buffer *src_buffer;
 
   if (!is_block_aligned(write_size)) {
@@ -404,7 +430,7 @@ size_t ObjectStore::cow_write_buffer(const std::shared_ptr<Object> &object,
 // TODO: is it a waste to allocate a request for a single buffer?
 //       should get all the buffers ready before anything else!
 void ObjectStore::read_buffer(const std::shared_ptr<Object> &object, 
-    Buffer *buffer) {
+                              Buffer *buffer) {
   IoRequest *request;
 
   if (flag_marked(buffer, B_UPTODATE)) {
@@ -428,7 +454,7 @@ void ObjectStore::read_buffer(const std::shared_ptr<Object> &object,
 // TODO: should allow some parallelism. don't hold the lock for the 
 //       entire read operation
 int ObjectStore::get_object(const std::string &object_name, std::string *out,
-    const uint32_t offset, const uint32_t size) {
+                            const uint32_t offset, const uint32_t size) {
   const lbn_t lbn_start = offset / opts.bso.block_size;
   const lbn_t lbn_end = (offset + size) / opts.bso.block_size;
   std::shared_ptr<Object> object;
@@ -443,7 +469,7 @@ int ObjectStore::get_object(const std::string &object_name, std::string *out,
 
   object = search_object(object_name, false);
   if (object == nullptr) {
-    return OBJECT_NOT_FOUND;
+    return os::OBJECT_NOT_FOUND;
   }
 
   if (size == 0) {
@@ -463,7 +489,7 @@ int ObjectStore::get_object(const std::string &object_name, std::string *out,
     buffer = get_block(object, lbn, lbn_end, false, 0);
 
     if (buffer == nullptr) {
-      return NO_CONTENT;
+      return os::NO_CONTENT;
     }
 
     all_buffers.push_back(buffer);
@@ -527,7 +553,7 @@ void ObjectStore::stop() {
 }
 
 void ObjectStore::after_write(const std::shared_ptr<Object> &object, 
-    IoRequest *request, bool finished) {
+                              IoRequest *request, bool finished) {
   //fprintf(stderr, "[os] after_write called req(%lu) unfinished(%d)\n", 
   //  request->get_id(), unfinished_writes.load());
 
@@ -562,26 +588,27 @@ void ObjectStore::after_read(IoRequest *request, bool finished) {
 }
 
 int ObjectStore::put_metadata(const std::string &object_name, 
-    const std::string &attribute, const std::string &value) {
+                              const std::string &attribute, 
+                              const std::string &value) {
   rocksdb::Status status;
 
   if (search_object(object_name, false) == nullptr) {
-    return OBJECT_NOT_FOUND;
+    return os::OBJECT_NOT_FOUND;
   }
 
   status = kv_store.put(CF_OBJ_META,
     get_object_metadata_key(object_name, attribute),
     value);
 
-  return OPERATION_SUCCESS;
+  return os::OPERATION_SUCCESS;
 }
 
 int ObjectStore::get_metadata(const std::string &object_name,
-    const std::string &attribute, std::string *buf) {
+                              const std::string &attribute, std::string *buf) {
   rocksdb::Status status;
 
   if (search_object(object_name, false) == nullptr) {
-    return OBJECT_NOT_FOUND;
+    return os::OBJECT_NOT_FOUND;
   }
 
   status = kv_store.get(CF_OBJ_META,
@@ -600,7 +627,7 @@ int ObjectStore::get_metadata(const std::string &object_name,
 }
 
 int ObjectStore::delete_metadata(const std::string &object_name,
-    const std::string &attribute) {
+                                 const std::string &attribute) {
   rocksdb::Status status;
 
   if (search_object(object_name, false) == nullptr) {
@@ -618,4 +645,6 @@ int ObjectStore::delete_metadata(const std::string &object_name,
   return OPERATION_SUCCESS;
 }
 
-}
+} // namespace os
+
+} // namespace morph

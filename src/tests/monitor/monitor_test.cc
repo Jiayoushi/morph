@@ -10,6 +10,8 @@
 namespace morph {
 namespace test {
 
+
+// TODO(urgent): implementation is modified, needs to use oss' name!
 TEST(Monitor, BasicOperation) {
   using namespace monitor_rpc;
   using MonitorStub = monitor_rpc::MonitorService::Stub;
@@ -42,6 +44,7 @@ TEST(Monitor, BasicOperation) {
   {
     grpc::ClientContext ctx;
     OssInfo *info = new OssInfo();
+    info->set_name("oss1");
     info->set_addr("1.2.3.4:1234");
     oss_set.insert("1.2.3.4:1234");
     add_oss_request.set_allocated_info(info);

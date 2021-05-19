@@ -6,6 +6,8 @@
 
 namespace morph {
 
+namespace os {
+
 void Buffer::copy_data(const char *data, uint32_t buf_offset, 
     uint32_t data_offset, uint32_t size) {
   std::lock_guard<std::mutex> lock(mutex);
@@ -101,4 +103,6 @@ void BufferManager::put_buffer(Buffer * buffer) {
   }
 }
 
-}
+} // namespace os
+
+} // namespace morph

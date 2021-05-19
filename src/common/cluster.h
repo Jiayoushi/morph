@@ -9,7 +9,7 @@ namespace morph {
 
 static const int INITIAL_CLUSTER_VERSION = 0;
 
-enum ErrorCode {
+enum ClusterErrorCode {
   S_SUCCESS = 0,
 
   // Requester's version is bigger than this monitor's version
@@ -28,52 +28,76 @@ enum ErrorCode {
   S_ADDR_INVALID = 5
 };
 
+struct Info {
+  std::string name;
+  NetworkAddress addr;
+
+  Info(const std::string &name, const NetworkAddress &addr):
+    name(name), addr(addr) {}
+};
+
+
+
 template <typename Service>
 class Cluster {
  public:
   using StubType = typename Service::Stub;
 
+  struct ServiceInstance {
+    std::string name;
+    NetworkAddress addr;
+    StubType *stub;
+
+    ServiceInstance() = delete;
+
+    ServiceInstance(const std::string &name,
+                    const NetworkAddress &addr):
+        name(name), addr(addr), stub(nullptr) {}
+
+    ~ServiceInstance() {
+      delete stub;
+    }
+
+    bool connected() const {
+      return stub != nullptr;
+    }
+
+    void connect() {
+      std::shared_ptr<grpc::Channel> ch = 
+        grpc::CreateChannel(addr, grpc::InsecureChannelCredentials());
+      assert(ch != nullptr);
+      stub = Service::NewStub(ch).release();
+    }
+  };
+
   Cluster():
     version(INITIAL_CLUSTER_VERSION) {}
 
-  ~Cluster() {
-    for (auto p = stub_map.begin(); p != stub_map.end(); ++p) {
-      delete p->second;
-    }
-  }
-
   // Simply add the instance without establishing the connection
-  ErrorCode add_instance(const NetworkAddress &addr) {
+  ClusterErrorCode add_instance(const std::string &name, 
+                                const NetworkAddress &addr) {
     if (!verify_network_address(addr)) {
       return S_ADDR_INVALID;
     }
-    if (stub_map.find(addr) != stub_map.end()) {
+    if (cluster_map.find(name) != cluster_map.end()) {
       return S_EXISTS;
     }
-    stub_map.emplace(addr, nullptr);
+    cluster_map.emplace(name, ServiceInstance(name, addr));
     return S_SUCCESS;
   }
 
-  ErrorCode remove_instance(const NetworkAddress &addr) {
-    if (!verify_network_address(addr)) {
-      return S_ADDR_INVALID;
-    }
-    if (stub_map.find(addr) == stub_map.end()) {
+  ClusterErrorCode remove_instance(const std::string &name) {
+    if (cluster_map.find(name) == cluster_map.end()) {
       return S_NOT_FOUND;
     }
-    stub_map.erase(addr);
+    cluster_map.erase(name);
     return S_SUCCESS;
   }
- 
-  // Establish connection
-  // On success, return 0.
-  // On error, return -1.
-  ErrorCode connect_to(const NetworkAddress &addr);
 
-  StubType * get_service(const NetworkAddress &addr) {
-    auto p = stub_map.find(addr);
-    assert(p != stub_map.end());
-    return p->second;
+  ServiceInstance * get_instance(const std::string &name) {
+    auto p = cluster_map.find(name);
+    assert(p != cluster_map.end());
+    return &p->second;
   }
 
   void add_version_by_one() {
@@ -89,39 +113,60 @@ class Cluster {
     return version;
   }
 
-  std::vector<NetworkAddress> get_cluster_addrs() const;
+  size_t size() const {
+    return cluster_map.size();
+  }
 
-  // TODO: 
-  template <typename ClusterMap>
-  void update_stub_map(const ClusterMap &map) {}
+  std::vector<std::string> get_cluster_names() const;
+
+  std::vector<Info> get_cluster_infos() const;
+
+  void update_cluster(uint64_t ver, 
+           const std::unordered_map<std::string, NetworkAddress> &new_cluster) {
+    for (auto p = new_cluster.cbegin(); p != new_cluster.end(); ++p) {
+      add_instance(p->first, p->second);
+    }
+
+    std::vector<std::string> to_delete;
+    for (auto p = cluster_map.cbegin(); p != cluster_map.cend(); ++p) {
+      if (new_cluster.find(p->second.name) == new_cluster.end()) {
+        to_delete.push_back(p->second.name);
+      }
+    }
+
+    for (const std::string &name: to_delete) {
+      cluster_map.erase(name);
+    }
+
+    version = ver;
+  }
+
+
+  // TODO: it's probably better to provide a iterator? But it's public for now,
+  //       so that monitor service impl can broadcast cluster map without 
+  //       coding the rpc parameters inside this class.
+  std::unordered_map<std::string, ServiceInstance> cluster_map;
 
  private:
   uint64_t version;
-  std::unordered_map<NetworkAddress, StubType *> stub_map;
 };
 
-
 template <typename Service>
-ErrorCode Cluster<Service>::connect_to(const NetworkAddress &addr) {
-  using grpc::InsecureChannelCredentials;
-
-  auto instance = stub_map.find(addr);
-  if (instance == stub_map.end()) {
-    return S_NOT_FOUND;
+std::vector<std::string> Cluster<Service>::get_cluster_names() const {
+  std::vector<std::string> result;
+  for (auto p = cluster_map.cbegin(); p != cluster_map.cend(); ++p) {
+    result.push_back(p->second.name);
   }
-
-  std::shared_ptr<grpc::Channel> ch = 
-    grpc::CreateChannel(addr, InsecureChannelCredentials());
-  instance->second = Service::NewStub(ch).release();
-
-  return S_SUCCESS;
+  return result;
 }
 
+
+// TODO(optimization): kinda slow to generate a vector each time
 template <typename Service>
-std::vector<NetworkAddress> Cluster<Service>::get_cluster_addrs() const {
-  std::vector<NetworkAddress> result;
-  for (auto p = stub_map.cbegin(); p != stub_map.cend(); ++p) {
-    result.push_back(p->first);
+std::vector<Info> Cluster<Service>::get_cluster_infos() const {
+  std::vector<Info> result;
+  for (auto p = cluster_map.cbegin(); p != cluster_map.cend(); ++p) {
+    result.emplace_back(p->first, p->second.addr);
   }
   return result;
 }

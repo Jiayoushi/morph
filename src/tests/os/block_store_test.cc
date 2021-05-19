@@ -14,9 +14,9 @@
 #include <common/options.h>
 #include <common/blocking_queue.h>
 
-using morph::Buffer;
-using morph::BlockStore;
-using morph::BufferManager;
+using morph::os::Buffer;
+using morph::os::BlockStore;
+using morph::os::BufferManager;
 using morph::lbn_t;
 using morph::get_garbage;
 using morph::BlockStoreOptions;
@@ -97,7 +97,7 @@ TEST(BlockStoreTest, ConcurrentGetPutBlocks) {
 }
 
 TEST(BlockStoreTest, ConcurrentReadWrite) {
-  using namespace morph;
+  using namespace morph::os;
 
   uint32_t num_threads = 5;
   uint32_t action_count = 50;
@@ -121,7 +121,9 @@ TEST(BlockStoreTest, ConcurrentReadWrite) {
 
         // Write
         write_req = std::make_shared<IoRequest>(0, OP_WRITE);
-        write_req->after_complete_callback = std::bind([](){});
+        write_req->after_complete_callback = std::bind([&write_req](){
+          write_req->notify_complete();
+        });
         for (uint32_t x = 0; x < buf_cnt; ++x) {
           Buffer * buffer = bm.get_buffer(pbn + x);
           flag_mark(buffer, B_DIRTY);
@@ -135,7 +137,9 @@ TEST(BlockStoreTest, ConcurrentReadWrite) {
 
         // Read
         read_req = std::make_shared<IoRequest>(0, OP_READ);
-        read_req->after_complete_callback = std::bind([](){});
+        read_req->after_complete_callback = std::bind([&read_req](){
+          read_req->notify_complete();
+        });
         for (Buffer *buffer: write_req->buffers) {
           flag_unmark(buffer, B_UPTODATE);
           memset(buffer->buf, 'x', buffer->buffer_size);

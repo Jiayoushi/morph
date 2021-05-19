@@ -2,8 +2,15 @@
 #define MOPRH_COMMON_LOGGER_H
 
 #include <spdlog/spdlog.h>
+#include <spdlog/sinks/basic_file_sink.h>
+#include <spdlog/fmt/bundled/printf.h>
+
+#include "common/filename.h"
 
 namespace morph {
+
+const enum spdlog::level::level_enum LOGGING_LEVEL = spdlog::level::level_enum::debug;
+const enum spdlog::level::level_enum FLUSH_LEVEL = spdlog::level::level_enum::debug;
 
 inline std::shared_ptr<spdlog::logger> init_logger(const std::string &name) {
   std::shared_ptr<spdlog::logger> logger;

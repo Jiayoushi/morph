@@ -13,6 +13,8 @@
 
 namespace morph {
 
+namespace os {
+
 class Bitmap {
  public:
   Bitmap(uint32_t total_blocks, uint8_t max_retry):
@@ -76,6 +78,8 @@ class Bitmap {
   const uint8_t MAX_RETRY;
 };
 
-}
+} // namespace os
+
+} // namespace morph
 
 #endif

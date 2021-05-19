@@ -13,6 +13,8 @@
 
 namespace morph {
 
+namespace os {
+
 BlockStore::BlockStore(const std::string &name,
                        BlockStoreOptions o):
     name(name),
@@ -209,7 +211,8 @@ void BlockStore::reap_routine() {
       if (!running) {
         break;
       } else {
-        std::this_thread::yield();
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        //fprintf(stderr, "sleep num_in_progress %d\n", num_in_progress.load());
         continue;
       }
     }
@@ -270,4 +273,6 @@ void BlockStore::stop() {
   assert(io_requests.empty());
 }
 
-}
+} // namespace os
+
+} // namespace morph

@@ -15,6 +15,8 @@
 
 namespace morph {
 
+namespace os {
+
 enum BUFFER_FLAG {
   // Do we even need this?
   B_VALID = 0,
@@ -28,10 +30,6 @@ enum BUFFER_FLAG {
 
   // An unaligned buffer does not need to read from disk, if the buffer is B_NEW
   B_NEW = 4,
-
-  B_WRITE_PENDING = 5,
-
-  B_READ_PENDING = 6,
 };
 
 class Buffer: NoCopy {
@@ -169,6 +167,8 @@ class BufferManager {
   std::function<void()> after_io_callback;
 };
 
-}
+} // namespace os
+
+} // namespace morph
 
 #endif

@@ -9,7 +9,8 @@ service MonitorService {
 }
 
 message OssInfo {
-  string addr = 1;
+  string name = 1;
+  string addr = 2;
 }
 
 message GetOssClusterRequest {

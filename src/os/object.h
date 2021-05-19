@@ -12,6 +12,8 @@
 
 namespace morph {
 
+namespace os {
+
 const uint32_t INVALID_EXTENT = std::numeric_limits<uint32_t>::max();
 
 struct Extent {
@@ -117,6 +119,8 @@ class Object {
   std::map<uint32_t, Extent> extent_tree;
 };
 
-}
+} // namespace os
+
+} // namespace morph
 
 #endif

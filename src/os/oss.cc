@@ -8,7 +8,7 @@
 
 namespace morph {
 
-namespace oss {
+namespace os {
 
 ObjectStoreServer::ObjectStoreServer(const std::string &name,
                                      const NetworkAddress &this_addr, 
@@ -40,6 +40,6 @@ ObjectStoreServer::ObjectStoreServer(const std::string &name,
 
   ObjectStoreServer::~ObjectStoreServer() {}
 
-  } // namespace oss
+  } // namespace os
 
   } // namespace morph

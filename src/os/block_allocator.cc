@@ -2,6 +2,8 @@
 
 namespace morph {
 
+namespace os {
+
 lbn_t Bitmap::allocate_blocks(uint32_t count) {
   lbn_t pbn;
   int res;
@@ -78,5 +80,6 @@ void Bitmap::deserialize(const std::string &v) {
   }
 }
 
+} // namespace os
 
-}
+} // namespace morph

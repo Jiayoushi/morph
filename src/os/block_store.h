@@ -19,6 +19,8 @@
 
 namespace morph {
 
+namespace os {
+
 class Buffer;
 
 enum IoOperation {
@@ -143,6 +145,8 @@ class BlockStore: NoCopy {
   std::atomic<uint32_t> num_in_progress;
 };
 
-}
+} // namespace os
+
+} // namespace morph
 
 #endif

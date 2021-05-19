@@ -146,12 +146,12 @@ int Namespace::mkdir(uid_t uid, const char *pathname, mode_t mode) {
     return ENOENT;
   }
 
-  if (parent->find_dentry(components.back().c_str()) != nullptr) {
+  if (parent->find_child(components.back().c_str()) != nullptr) {
     return EEXIST;
   }
 
   new_dir = allocate_inode<InodeDirectory>(INODE_TYPE::DIRECTORY, mode, uid);
-  parent->add_dentry(components.back().c_str(), new_dir->ino);
+  parent->add_child(components.back().c_str(), new_dir->ino);
   new_dir->links += 1;
   parent->links += 1;
 
@@ -212,7 +212,7 @@ int Namespace::rmdir(uid_t uid, const char *pathname) {
   if (parent == nullptr) {
     return ENOENT;
   }
-  dentry = parent->find_dentry(components.back().c_str());
+  dentry = parent->find_child(components.back().c_str());
   if (dentry == nullptr) {
     return ENOENT;
   }
@@ -231,7 +231,7 @@ int Namespace::rmdir(uid_t uid, const char *pathname) {
   parent->links -= 1;
   dir->links -= 1;
   InodeNumber ino = dentry->ino;
-  parent->remove_dentry(ino);
+  parent->remove_child(ino);
   remove_inode(ino);
 
   return 0;
@@ -251,7 +251,7 @@ int Namespace::readdir(uid_t uid, const mds_rpc::DirRead *dir,
   }
   dirp = dynamic_cast<InodeDirectory *>(ip);
   assert(dirp != nullptr);
-  dentry = dirp->get_dentry(dir->pos());
+  dentry = dirp->get_child(dir->pos());
   if (dentry == nullptr) {
     return -1;
   }
@@ -303,7 +303,7 @@ Inode * Namespace::pathwalk(const std::vector<std::string> &components,
       InodeDirectory *dir = dynamic_cast<InodeDirectory *>(parent);
       assert(dir != nullptr);
 
-      Dentry *dentry = dir->find_dentry(components[i].c_str());
+      Dentry *dentry = dir->find_child(components[i].c_str());
       if (dentry == nullptr) {
         return nullptr;
       }

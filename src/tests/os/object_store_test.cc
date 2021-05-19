@@ -3,12 +3,12 @@
 #include <tests/utils.h>
 
 #include "common/filename.h"
-
+#include "os/error_code.h"
 
 namespace morph {
 namespace test {
 
-using morph::ObjectStore;
+using morph::os::ObjectStore;
 using morph::ObjectStoreOptions;
 using morph::get_garbage;
 using morph::delete_directory;
@@ -95,9 +95,8 @@ void cleanup(const std::string &rocks_file, const std::string &rocks_wal_file) {
   delete_directory(rocks_wal_file);
 }
 
-TEST(ObjectStoreTest, ObjectExtent) {
-  using morph::Object;
-  using morph::Extent;
+TEST(ObjectStore, ObjectExtent) {
+  using namespace morph::os;
   using morph::lbn_t;
 
   Extent ext;
@@ -190,7 +189,7 @@ TEST(ObjectStoreTest, ObjectExtent) {
   ASSERT_TRUE(ext == Extent(28, 28, 14));
 }
 
-TEST(ObjectStoreTest, BasicSmallReadWrite) {
+TEST(ObjectStore, BasicSmallReadWrite) {
   const std::string &name = get_next_oss_name();
   ObjectStore os(name);
 
@@ -199,7 +198,7 @@ TEST(ObjectStoreTest, BasicSmallReadWrite) {
   delete_directory(name);
 }
 
-TEST(ObjectStoreTest, BasicSmallReadWrite2) {
+TEST(ObjectStore, BasicSmallReadWrite2) {
   const std::string &name = get_next_oss_name();
   ObjectStore os(name);
 
@@ -208,7 +207,7 @@ TEST(ObjectStoreTest, BasicSmallReadWrite2) {
   delete_directory(name);
 }
 
-TEST(ObjectStoreTest, BasicSmallReadWrite3) {
+TEST(ObjectStore, BasicSmallReadWrite3) {
   ObjectStoreOptions opts;
   opts.bso.TOTAL_BLOCKS = 32;
   opts.bmo.TOTAL_BUFFERS = 25;
@@ -220,7 +219,7 @@ TEST(ObjectStoreTest, BasicSmallReadWrite3) {
   delete_directory(name);
 }
 
-TEST(ObjectStoreTest, BasicLargeReadWrite) {
+TEST(ObjectStore, BasicLargeReadWrite) {
   const std::string &name = get_next_oss_name();
   ObjectStore os(name);
 
@@ -231,7 +230,7 @@ TEST(ObjectStoreTest, BasicLargeReadWrite) {
 }
 
 
-TEST(ObjectStoreTest, ConcurrentSmallReadWrite) {
+TEST(ObjectStore, ConcurrentSmallReadWrite) {
   ObjectStoreOptions opts;
   opts.bmo.TOTAL_BUFFERS = 100;
   opts.bso.TOTAL_BLOCKS = 320;
@@ -252,7 +251,7 @@ TEST(ObjectStoreTest, ConcurrentSmallReadWrite) {
 }
 
 // TODO: the sequential read speed is so slow that this test take minutes...
-TEST(ObjectStoreTest, RecoverAfterSafeExit) {
+TEST(ObjectStore, RecoverAfterSafeExit) {
   const uint32_t FILE_SIZE = 40960;
   std::vector<std::string> names;
   std::vector<std::string> contents;
@@ -289,7 +288,9 @@ TEST(ObjectStoreTest, RecoverAfterSafeExit) {
   delete_directory(name);
 }
 
-TEST(ObjectStoreTest, BasicObjectMetadataOperations) {
+TEST(ObjectStore, BasicObjectMetadataOperations) {
+  using namespace morph::os;
+
   const std::string &name = get_next_oss_name();
   ObjectStore os(name);
   int ret_val;
@@ -306,13 +307,13 @@ TEST(ObjectStoreTest, BasicObjectMetadataOperations) {
   ASSERT_EQ(buf, "xx");
 
   ret_val = os.get_metadata("obj", "not_nice", &buf);
-  ASSERT_EQ(ret_val, morph::METADATA_NOT_FOUND);
+  ASSERT_EQ(ret_val, METADATA_NOT_FOUND);
 
   ret_val = os.delete_metadata("obj", "nice");
   ASSERT_EQ(ret_val, 0);
 
   ret_val = os.get_metadata("obj", "nice", &buf);
-  ASSERT_EQ(ret_val, morph::METADATA_NOT_FOUND);
+  ASSERT_EQ(ret_val, METADATA_NOT_FOUND);
 
   ret_val = os.delete_metadata("obj", "nice");
   ASSERT_EQ(ret_val, 0);
@@ -323,7 +324,7 @@ TEST(ObjectStoreTest, BasicObjectMetadataOperations) {
   delete_directory(name);
 }
 
-TEST(ObjectStoreTest, ConcurrentGetPutMetadata) {
+TEST(ObjectStore, ConcurrentGetPutMetadata) {
   const uint8_t NUM_THREADS = 10;
   const uint8_t NUM_ATTRIBUTES = 100;
   const std::string &name = get_next_oss_name();

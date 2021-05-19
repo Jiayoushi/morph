@@ -3,15 +3,16 @@
 
 #include <vector>
 
-#include "common/network.h"
+#include "common/cluster.h"
 
 namespace morph {
 namespace monitor {
 
+
 // This is the initial monitor setup passed to create a mds or oss
 // It must include all the monitors that may be a leader.
 struct Config {
-  std::vector<NetworkAddress> addresses;
+  std::vector<Info> infos;
 };
 
 } // monitor
