@@ -4,6 +4,7 @@
 #include <unordered_map>
 
 #include "common/consistent_hash.h"
+#include "tests/utils.h"
 
 namespace morph {
 namespace test {
@@ -26,23 +27,30 @@ TEST(ConsistentHash, Uniform) {
   std::vector<std::string> names;
   std::unordered_map<std::string, int> load;
   const int TOTAL_OBJECTS = 10000;
-  const int TOTAL_SERVERS = 10;
-  const int EXPECTED_LOAD = 3 * (TOTAL_OBJECTS / TOTAL_SERVERS);
-  const int MAX_ALLOWED_DIFF = 200;
+  const int INITIAL_SERVERS = 10;
+  const double DEVIATION_FACTOR = 0.15;
 
-  for (int i = 1; i <= TOTAL_SERVERS; ++i) {
+  for (int i = 1; i <= INITIAL_SERVERS; ++i) {
     names.push_back("oss" + std::to_string(i));
   }
 
-  for (int i = 0; i < TOTAL_OBJECTS; ++i) {
-    std::string obj_name = "obj" + std::to_string(i);
-    for (const auto &x: assign_group(names, obj_name, 3)) {
-      load[x] += 1;
-    }
-  }
+  for (int x = 0; x < 5; ++x) {
+    const int EXPECTED_LOAD = 3 * (TOTAL_OBJECTS / names.size());
+    const int MAX_ALLOWED_DIFF = EXPECTED_LOAD * DEVIATION_FACTOR;
 
-  for (auto p = load.cbegin(); p != load.cend(); ++p) {
-    EXPECT_TRUE(abs(p->second -  EXPECTED_LOAD) <= MAX_ALLOWED_DIFF);
+    for (int i = 0; i < TOTAL_OBJECTS; ++i) {
+      std::string obj_name = get_garbage(10);
+      for (const auto &x: assign_group(names, obj_name, 3)) {
+        load[x] += 1;
+      }
+    }
+
+    for (auto p = load.cbegin(); p != load.cend(); ++p) {
+      EXPECT_TRUE(abs(p->second -  EXPECTED_LOAD) <= MAX_ALLOWED_DIFF);
+    }
+
+    names.erase(names.begin() + (x % names.size()));
+    load.clear();
   }
 }
 
