@@ -8,35 +8,42 @@
 
 namespace morph {
 
-// Horner’s rule
-long hash_string(const char *key) {
-  long hash_val = 0;
-	while (*key != '\0') {
-		hash_val = (hash_val << 4) + *(key++);
-		long g = hash_val & 0xF0000000L;
-		if (g != 0) 
-      hash_val ^= (g >> 24);
-		hash_val &= ~g;
-	}
-	return hash_val;
-}
+static const int REPLICATION_FACTOR = 100;
 
 std::vector<std::string> assign_group(const std::vector<std::string> &buckets,
                                       const std::string &item, const int size) {
-  std::vector<std::string> sorted_buckets;
   std::vector<std::string> result;
+  std::hash<std::string> hash_func;
+  std::map<size_t, std::string> ring;
 
   assert(!buckets.empty());
   assert(size <= buckets.size());
 
-  sorted_buckets = buckets;
-  std::sort(sorted_buckets.begin(), sorted_buckets.end());
+  for (const std::string &bucket: buckets) {
+    for (int i = 0; i < REPLICATION_FACTOR; ++i) {
+      std::string id = bucket + std::to_string(i);
+      size_t hash_val = hash_func(id);
+      ring[hash_val] = bucket;
+    }
+  }
 
-  long hash_val = hash_string(item.c_str());
-  int index = hash_val % sorted_buckets.size();
   for (int i = 0; i < size; ++i) {
-    result.push_back(sorted_buckets[index]);
-    index = (index + 1) % sorted_buckets.size();
+    std::string id = item + std::to_string(i);
+    size_t hash_val = hash_func(item);
+    auto iter = ring.lower_bound(hash_val);
+
+    if (iter == ring.end()) {
+      iter = ring.begin();
+    }
+
+    while (std::find(std::begin(result), std::end(result), iter->second) != std::end(result)) {
+      ++iter;
+      if (iter == ring.end()) {
+        iter = ring.begin();
+      }
+    }
+
+    result.push_back(iter->second);
   }
 
   assert(result.size() == size);
