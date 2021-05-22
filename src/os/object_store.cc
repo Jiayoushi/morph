@@ -234,10 +234,10 @@ void ObjectStore::object_large_write(std::shared_ptr<Object> object,
     this->after_write(object, request, false);
 
     handle->post_log_callback = [this, request, on_apply]() {
-      end_request(request);
       if (on_apply) {
         on_apply();
       }
+      end_request(request);
     };
 
     handle->log(LOG_SYS_META, "system-bitmap", std::move(bitmap));
@@ -268,10 +268,10 @@ void ObjectStore::object_small_write(std::shared_ptr<Object> object,
 
   request->after_complete_callback = 
     [this, object, request, on_apply]() {
-      after_write(object, request, true);
       if (on_apply) {
         on_apply();
       }
+      after_write(object, request, true);
     };
 
   for (lbn_t lbn = lbn_start; 
