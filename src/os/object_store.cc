@@ -240,8 +240,10 @@ void ObjectStore::object_large_write(std::shared_ptr<Object> object,
       end_request(request);
     };
 
-    handle->log(LOG_SYS_META, "system-bitmap", std::move(bitmap));
-    handle->log(LOG_OBJ_META, object->name, std::move(object_meta));
+    handle->log(kv_store.get_cf_handle(LOG_SYS_META), 
+                "system-bitmap", std::move(bitmap));
+    handle->log(kv_store.get_cf_handle(LOG_OBJ_META), 
+                object->name, std::move(object_meta));
 
     kv_store.end_transaction(handle);
   };
@@ -322,17 +324,17 @@ void ObjectStore::log_write(const std::shared_ptr<Object> &object,
     request);
 
   if (bitmap_modified) {
-    handle->log(LOG_SYS_META,
+    handle->log(kv_store.get_cf_handle(LOG_SYS_META),
                 "system-bitmap",
                 std::move(block_store.serialize_bitmap()));
                 
     std::string v = serialize(*object);
-    handle->log(LOG_OBJ_META, 
+    handle->log(kv_store.get_cf_handle(LOG_OBJ_META), 
                 object_name, 
                 std::move(v));
   }
 
-  handle->log(LOG_OBJ_DATA, 
+  handle->log(kv_store.get_cf_handle(LOG_OBJ_DATA), 
     get_data_key(handle->transaction->id, object_name, offset), 
     std::move(data));
 

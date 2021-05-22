@@ -42,7 +42,7 @@ struct LogHandle {
 
   bool flushed;
 
-  std::list<Log> logs;
+  rocksdb::WriteBatch write_batch;
 
   std::function<void()> post_log_callback;
 
@@ -53,18 +53,12 @@ struct LogHandle {
     transaction(txn)
   {}
 
-  void log(LogType type, const std::string &key, std::string &&data) {
-    // First check if there is any duplicate keys
-    // If there is, then the latter log should overwrite the
-    // previous one
-    for (auto p = logs.begin(); p != logs.end(); ++p) {
-      if (p->key == key) {
-        p->value = std::move(data);
-        return;
-      }
+  void log(rocksdb::ColumnFamilyHandle *handle, const std::string &key, std::string &&data) {
+    auto s = write_batch.Put(handle, key, data);
+    if (!s.ok()) {
+      std::cerr << "Failed to put: " << s.ToString() << std::endl;
+      exit(EXIT_FAILURE);
     }
-
-    logs.emplace_back(type, key, std::move(data));
   }
 };
 

@@ -148,29 +148,19 @@ void KvStore::write_routine() {
     batch.Clear();
 
     for (const auto &handle: transaction->handles) {
-      for (const auto &log: handle->logs) {
-        s = batch.Put(get_cf_handle(log.type), log.key, log.value);
-        if (!s.ok()) {
-          std::cerr << "Failed to put: " << s.ToString() << std::endl;
-          exit(EXIT_FAILURE);
-        }
+      s = db->Write(WriteOptions(), &handle->write_batch);
+      if (!s.ok()) {
+        std::cerr << "Failed to write batch " << s.ToString() << std::endl;
+        exit(EXIT_FAILURE);
       }
     }
-
-    s = db->Write(WriteOptions(), &batch);
-    if (!s.ok()) {
-      std::cerr << "Failed to write batch " << s.ToString() << std::endl;
-      exit(EXIT_FAILURE);
-    }
  
-    //fprintf(stderr, "[kv] TRANSACTION %d is written, it's time to call post_log_callback\n", transaction->id);
     for (const auto &handle: transaction->handles) {
       if (handle->post_log_callback) {
         handle->post_log_callback();
       }
     }
     transaction->handles.clear();
-    //fprintf(stderr, "[kv] TRANSACTION %d is written, callbacks are called\n", transaction->id);
     ++next_expected_txn;
   }
 }
