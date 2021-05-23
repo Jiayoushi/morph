@@ -17,11 +17,13 @@ ObjectStore::ObjectStore(const std::string &name, ObjectStoreOptions oso):
     opts(oso),
     block_store(name, opts.bso),
     kv_store(name, opts.kso),
+    block_allocator(opts.bao),
     buffer_manager(oso.bmo),
     unfinished_writes(0),
     unfinished_reads(0),
     running(true),
     request_id(0) {
+
 
   logger = init_logger(name);
   assert(logger != nullptr);
@@ -50,36 +52,38 @@ void ObjectStore::recover() {
   std::string object_name;
 
   // Restore bitmap
-  s = kv_store.db->Get(rocksdb::ReadOptions(), kv_store.handles[CF_SYS_META], "system-bitmap", &bitmap);
-  if (!s.ok()) {
-    logger->warn("No system-bitmap in the kv store! recover procedure stopped.");
-    return;
+  auto bitmap_iter = kv_store.db->NewIterator(
+                         ReadOptions(),
+                         kv_store.get_cf_handle(CF_INDEX::CF_SYS_BITMAP));
+  for (bitmap_iter->SeekToFirst();
+       bitmap_iter->Valid();
+       bitmap_iter->Next()) {
+    block_allocator.restore_metadata(bitmap_iter->key().ToString(),
+                                     bitmap_iter->value().ToString());
   }
-  block_store.deserialize_bitmap(bitmap);
+  delete bitmap_iter;
 
   // Restore object metadata
-  auto p = kv_store.db->NewIterator(ReadOptions(), 
-    kv_store.handles[CF_OBJ_META]);
-  for (p->SeekToFirst(); p->Valid(); p->Next()) {
-    object_name = p->key().ToString();
+  auto obj_meta_iter = kv_store.db->NewIterator(
+                             ReadOptions(), 
+                             kv_store.get_cf_handle(CF_INDEX::CF_OBJ_META));
+
+  for (obj_meta_iter->SeekToFirst(); 
+       obj_meta_iter->Valid(); 
+       obj_meta_iter->Next()) {
+    object_name = obj_meta_iter->key().ToString();
 
     object = search_object(object_name, false);
     assert(object == nullptr);
 
     object = allocate_object(object_name);
 
-    deserialize(p->value().ToString(), *object);
+    assert(obj_meta_iter->value().size() > 0);
+    deserialize(obj_meta_iter->value().ToString(), *object);
   }
-
-  delete p;
+  delete obj_meta_iter;
 
   // TODO: Replay the write calls
-
-
-  // TODO: delete any allocated blocks that has no extent that references them
-  // it's possible because COW allocate blocks, but other writes that
-  // modify bitmap may use WAL to persist the bitmap before the data persist
-  // of COW is finished.
 }
 
 std::shared_ptr<Object> ObjectStore::allocate_object(const std::string &name) {
@@ -166,21 +170,23 @@ void ObjectStore::object_large_write(std::shared_ptr<Object> object,
   using NewBufferList = typename std::list<Buffer *>;
 
   const uint32_t start_off = offset / opts.bso.block_size,
-              end_off = (offset + data.size()) / opts.bso.block_size;
+                 end_off = (offset + data.size()) / opts.bso.block_size;
   const uint32_t total_blocks = end_off - start_off + 1;
   Buffer *buffer;
-  IoRequest *request = start_request(OP_WRITE);
+  IoRequest *request = allocate_request(OP_LARGE_WRITE);
   std::list<Buffer *>::iterator iter;
   const char *write_ptr = data.c_str();
   uint32_t write_size;
   lbn_t new_start_blk;
-  std::string bitmap, object_meta;
-  std::vector<std::pair<lbn_t, uint32_t>> blocks_to_free;
+  std::shared_ptr<LogHandle> handle;
 
   assert(total_blocks >= 3);
 
+  handle = kv_store.start_transaction();
+
   // Allocate blocks and get buffers
-  new_start_blk = block_store.allocate_blocks(total_blocks);
+  new_start_blk = block_allocator.allocate_blocks(total_blocks, handle.get());
+
   for (uint32_t blk = new_start_blk; 
       blk < new_start_blk + total_blocks; 
       ++blk) {
@@ -213,38 +219,31 @@ void ObjectStore::object_large_write(std::shared_ptr<Object> object,
   assert(*write_ptr == '\0');
   assert((++iter) == request->buffers.end());
 
-  blocks_to_free = object->delete_extent_range(start_off, end_off);
-  for (const auto &range: blocks_to_free) {
-    block_store.free_blocks(range.first, range.second);
+
+  // TODO: it's better to let the object's insert_extent/remove_extent to
+  //       handle the log operation. Probably? Since the object's 
+  //       index tree might become complex
+  auto blocks_to_free = object->delete_extent_range(start_off, end_off);
+  for (const auto &pair: blocks_to_free) {
+    block_allocator.deallocate_blocks(pair.first, pair.second, handle.get());
   }
   object->insert_extent(start_off, end_off, new_start_blk);
+  std::string object_meta = std::move(serialize(*object));
+  handle->put(CF_INDEX::CF_OBJ_META,
+              object->name,
+              std::move(object_meta));
 
-  bitmap = std::move(block_store.serialize_bitmap());
-  object_meta = std::move(serialize(*object));
+  handle->post_log_callback = [this, request, on_apply]() {
+    if (on_apply) {
+      on_apply();
+    }
+    end_request(request);
+    delete request;
+  };
 
   request->after_complete_callback = 
-      [this, object, request,
-      bitmap = std::move(bitmap), 
-      object_meta = std::move(object_meta),
-      on_apply] () mutable {
-    std::shared_ptr<LogHandle> handle;
-
-    handle = kv_store.start_transaction();
-
+      [this, object, request, handle]() mutable {
     this->after_write(object, request, false);
-
-    handle->post_log_callback = [this, request, on_apply]() {
-      if (on_apply) {
-        on_apply();
-      }
-      end_request(request);
-    };
-
-    handle->log(kv_store.get_cf_handle(LOG_SYS_META), 
-                "system-bitmap", std::move(bitmap));
-    handle->log(kv_store.get_cf_handle(LOG_OBJ_META), 
-                object->name, std::move(object_meta));
-
     kv_store.end_transaction(handle);
   };
 
@@ -262,11 +261,17 @@ void ObjectStore::object_small_write(std::shared_ptr<Object> object,
   const lbn_t lbn_start = offset / opts.bso.block_size;
   const lbn_t lbn_end = (offset + data.size()) / opts.bso.block_size;
   Buffer * buffer;
-  bool bitmap_modified = false;
+  bool obj_meta_changed = false;
   uint32_t unwritten = data.size();
   uint32_t write_len = 0, buf_off = 0, new_blocks = 0;
   const char *data_ptr = data.c_str();
-  IoRequest *request = start_request(OP_WRITE);
+  IoRequest *request = allocate_request(OP_SMALL_WRITE);
+  std::shared_ptr<LogHandle> log_handle;
+
+  log_handle = kv_store.start_transaction();
+
+  log_handle->post_log_callback = std::bind(&ObjectStore::post_log, this, 
+                                            request);
 
   request->after_complete_callback = 
     [this, object, request, on_apply]() {
@@ -282,67 +287,43 @@ void ObjectStore::object_small_write(std::shared_ptr<Object> object,
     buf_off = lbn == lbn_start ? offset % opts.bso.block_size: 0;
     write_len = std::min(opts.bso.block_size - buf_off, unwritten);
 
-    buffer = get_block(object, lbn, lbn_end, true, new_blocks);
+    buffer = get_block(object, lbn, log_handle.get(), 
+                       lbn_end, true, new_blocks);
 
     // When get_block tries to allocate, it will allocate more than one blocks
     // So all blocks following the first one should be marked B_NEW
     // We use this new_blocks to count how many blocks following the first one
     // should be marked as new_block
     if (flag_marked(buffer, B_NEW)) {
-      bitmap_modified = true;
+      obj_meta_changed = true;
       new_blocks = new_blocks == 0 ? lbn_end - lbn : new_blocks - 1;
     }
 
     write_buffer(object, buffer, data_ptr, buf_off, write_len);
 
-    //fprintf(stderr, "[os] req(%lu) try to lock buffer for long %d\n",
-    //  request->get_id(), buffer->lbn);
-    buffer->mutex.lock();
-    //fprintf(stderr, "[os] req(%lu) got lock of buffer for long %d\n",
-    //  request->get_id(), buffer->lbn);
     request->buffers.push_back(buffer);
   }
 
   assert(!request->buffers.empty());
 
-  log_write(object, object_name, request, data, offset, bitmap_modified);
-
-  //fprintf(stderr, "[os] small_write returned\n");
-}
-
-void ObjectStore::log_write(const std::shared_ptr<Object> &object, 
-                            const std::string &object_name, 
-                            IoRequest *request, std::string data, 
-                            uint32_t offset, bool bitmap_modified) {
-  std::shared_ptr<LogHandle> handle;
-
-  handle = kv_store.start_transaction();
-  //fprintf(stderr, "[os] req(%lu) is assigned txn(%lu)\n",
-  //  request->get_id(), handle->transaction->id);
-
-  handle->post_log_callback = std::bind(&ObjectStore::post_log, this, 
-    request);
-
-  if (bitmap_modified) {
-    handle->log(kv_store.get_cf_handle(LOG_SYS_META),
-                "system-bitmap",
-                std::move(block_store.serialize_bitmap()));
-                
+  if (obj_meta_changed) {
     std::string v = serialize(*object);
-    handle->log(kv_store.get_cf_handle(LOG_OBJ_META), 
-                object_name, 
-                std::move(v));
+    assert(v.size() > 0);
+    log_handle->put(CF_INDEX::CF_OBJ_META, 
+                    object_name, 
+                    std::move(v));
   }
 
-  handle->log(kv_store.get_cf_handle(LOG_OBJ_DATA), 
-    get_data_key(handle->transaction->id, object_name, offset), 
-    std::move(data));
+  log_handle->put(CF_INDEX::CF_OBJ_DATA,
+                  get_data_key(log_handle->transaction->id, 
+                               object_name, offset), 
+                  std::move(data));
 
-  kv_store.end_transaction(handle);
+  kv_store.end_transaction(log_handle);
 }
 
 Buffer * ObjectStore::get_block(std::shared_ptr<Object> object, 
-                                uint32_t target, 
+                                uint32_t target, LogHandle *handle,
                                 uint32_t target_end, bool create, 
                                 uint32_t new_blocks) {
   Buffer *buffer;
@@ -365,7 +346,8 @@ Buffer * ObjectStore::get_block(std::shared_ptr<Object> object,
       count = target_end - target + 1;
     }
 
-    lbn = block_store.allocate_blocks(count);
+    lbn = block_allocator.allocate_blocks(count, handle);
+
     object->insert_extent(target, target + count - 1, lbn);
     allocated = true;
   }
@@ -384,12 +366,10 @@ uint32_t ObjectStore::write_buffer(const std::shared_ptr<Object> &object,
                                    uint32_t buf_offset,
                                    uint32_t size, bool update_flags) {
   if (!is_block_aligned(size) && !flag_marked(buffer, B_NEW)) {
-    read_buffer(object, buffer);
+    read_buffer_from_disk(object, buffer);
   }
 
-  //fprintf(stderr, "[os] lock buffer %d to copy data\n", buffer->lbn);
-  buffer->copy_data(data_ptr, buf_offset, 0, size);
-  //fprintf(stderr, "[os] finished copy data %d, unlocked\n", buffer->lbn);
+  buffer->copy_in(data_ptr, 0, buf_offset, size);
 
   if (update_flags) {
     flag_mark(buffer, B_DIRTY);
@@ -397,7 +377,6 @@ uint32_t ObjectStore::write_buffer(const std::shared_ptr<Object> &object,
     flag_unmark(buffer, B_NEW);
   }
 
-  //fprintf(stderr, "written %d\n", size);
   return size;
 }
 
@@ -408,12 +387,13 @@ size_t ObjectStore::cow_write_buffer(const std::shared_ptr<Object> &object,
                                      const char *data_ptr) {
   Buffer *src_buffer;
 
+  // If it's a partial write, we need to read the old block first (if any).
   if (!is_block_aligned(write_size)) {
     src_buffer = get_block(object, file_off);
 
     if (src_buffer != nullptr) {
       if (!flag_marked(src_buffer, B_UPTODATE)) {
-        read_buffer(object, src_buffer);
+        read_buffer_from_disk(object, src_buffer);
       }
 
       write_buffer(object, dst_buffer, src_buffer->buf,
@@ -431,21 +411,19 @@ size_t ObjectStore::cow_write_buffer(const std::shared_ptr<Object> &object,
 
 // TODO: is it a waste to allocate a request for a single buffer?
 //       should get all the buffers ready before anything else!
-void ObjectStore::read_buffer(const std::shared_ptr<Object> &object, 
-                              Buffer *buffer) {
+void ObjectStore::read_buffer_from_disk(const std::shared_ptr<Object> &object, 
+                                        Buffer *buffer) {
   IoRequest *request;
 
   if (flag_marked(buffer, B_UPTODATE)) {
     return;
   }
 
-  request = start_request(OP_READ);
+  request = allocate_request(OP_READ);
   request->after_complete_callback = std::bind(&ObjectStore::after_read, 
     this, request, false);
   request->buffers.push_back(buffer);
 
-  //fprintf(stderr, "[OS] read_buffer: submit_request lbn(%d) size(%lu)\n",
-  //  buffer->lbn, 1);
   block_store.submit_request(request);
 
   request->wait_for_complete();
@@ -488,7 +466,7 @@ int ObjectStore::get_object(const std::string &object_name, std::string *out,
   for (lbn_t lbn = lbn_start; 
        lbn <= lbn_end; 
        ++lbn) {
-    buffer = get_block(object, lbn, lbn_end, false, 0);
+    buffer = get_block(object, lbn, nullptr, lbn_end, false, 0);
 
     if (buffer == nullptr) {
       return os::NO_CONTENT;
@@ -502,27 +480,30 @@ int ObjectStore::get_object(const std::string &object_name, std::string *out,
   }
 
   if (!non_uptodate_buffers.empty()) {
-    request = start_request(OP_READ);
+    request = allocate_request(OP_READ);
     request->after_complete_callback = std::bind(&ObjectStore::after_read, 
       this, request, false);
     request->buffers = std::move(non_uptodate_buffers);
 
-    //fprintf(stderr, "[os] going to submit read req(%lu)\n", request->get_id());
     block_store.submit_request(request);
 
     request->wait_for_complete();
     end_request(request);
+    delete request;
   }
 
   // Read buffers into the space provided
   out_ptr = 0;
   unread = size;
 
+  char buf[8192];
   for (Buffer *buffer: all_buffers) {
     buf_ptr = out_ptr == 0 ? offset % opts.bso.block_size: 0;
     bytes_to_read = std::min(opts.bso.block_size - buf_ptr, unread);
 
-    out->append(buffer->buf + buf_ptr, bytes_to_read);
+    buffer->copy_out(buf, 0, buf_ptr, bytes_to_read);
+
+    out->append(buf, bytes_to_read);
 
     out_ptr += bytes_to_read;
     unread -= bytes_to_read;
@@ -532,7 +513,6 @@ int ObjectStore::get_object(const std::string &object_name, std::string *out,
 
   // Release the buffers
   for (Buffer *buffer: all_buffers) {
-    //fprintf(stderr, "read release buffer %d ref %d\n", buffer->lbn, buffer->ref);
     buffer_manager.put_buffer(buffer);
   }
 
@@ -547,7 +527,6 @@ void ObjectStore::stop() {
     std::this_thread::sleep_for(std::chrono::seconds(1));
     continue;
   }
-  //fprintf(stderr, "[os] ALL WRITES AND READS ARE DONE\n");
 
   kv_store.stop();
   running = false;
@@ -556,19 +535,11 @@ void ObjectStore::stop() {
 
 void ObjectStore::after_write(const std::shared_ptr<Object> &object, 
                               IoRequest *request, bool finished) {
-  //fprintf(stderr, "[os] after_write called req(%lu) unfinished(%d)\n", 
-  //  request->get_id(), unfinished_writes.load());
-
   for (Buffer *buffer: request->buffers) {
     flag_unmark(buffer, B_DIRTY);
     buffer_manager.put_buffer(buffer);
     buffer->mutex.unlock();
-    //fprintf(stderr, "[os] req(%d) buffer(%d) unlocked\n",
-    //  request->get_id(), buffer->lbn);
   }
-
-  //fprintf(stderr, "[os] after_write exit req(%lu) unfinished(%d)\n", 
-  //  request->get_id(), unfinished_writes.load());
 
   if (finished) {
     end_request(request);
@@ -598,9 +569,9 @@ int ObjectStore::put_metadata(const std::string &object_name,
     return os::OBJECT_NOT_FOUND;
   }
 
-  status = kv_store.put(CF_OBJ_META,
-    get_object_metadata_key(object_name, attribute),
-    value);
+  status = kv_store.put(CF_INDEX::CF_OBJ_META,
+                        get_object_metadata_key(object_name, attribute),
+                        value);
 
   return os::OPERATION_SUCCESS;
 }
@@ -613,9 +584,9 @@ int ObjectStore::get_metadata(const std::string &object_name,
     return os::OBJECT_NOT_FOUND;
   }
 
-  status = kv_store.get(CF_OBJ_META,
-    get_object_metadata_key(object_name, attribute),
-    buf);
+  status = kv_store.get(CF_INDEX::CF_OBJ_META,
+                        get_object_metadata_key(object_name, attribute),
+                        buf);
 
   if (!status.ok()) {
     if (status == status.NotFound()) {
@@ -636,8 +607,8 @@ int ObjectStore::delete_metadata(const std::string &object_name,
     return OBJECT_NOT_FOUND;
   }
 
-  status = kv_store.del(CF_OBJ_META,
-    get_object_metadata_key(object_name, attribute));
+  status = kv_store.del(CF_INDEX::CF_OBJ_META,
+                        get_object_metadata_key(object_name, attribute));
 
   if (!status.ok()) {
     std::cerr << status.ToString() << std::endl;

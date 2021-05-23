@@ -37,8 +37,9 @@ struct ObjectUnit {
 };
 
 void object_random_read_write(ObjectStore &os, const std::string &name, 
-    uint32_t ACTION_COUNT, const uint32_t CONTENT_SIZE, 
-    uint32_t min_read_size) {
+                              uint32_t ACTION_COUNT, 
+                              const uint32_t CONTENT_SIZE, 
+                              uint32_t min_read_size) {
   uint32_t off;
   uint32_t size;
   std::string content = get_garbage(CONTENT_SIZE);
@@ -76,7 +77,7 @@ void object_sequential_write(ObjectStore &os, const std::string &name,
 }
 
 void object_sequential_read(ObjectStore &os, const std::string &name, 
-    const std::string &content) {
+                            const std::string &content) {
   uint32_t to_read;
   uint32_t total_read = 0;
 
@@ -86,6 +87,7 @@ void object_sequential_read(ObjectStore &os, const std::string &name,
     std::string get_buf;
 
     os.get_object(name, &get_buf, off, to_read);
+
     ASSERT_EQ(expect_buf, get_buf);
   }
 }
@@ -255,11 +257,12 @@ TEST(ObjectStore, RecoverAfterSafeExit) {
   const uint32_t FILE_SIZE = 40960;
   std::vector<std::string> names;
   std::vector<std::string> contents;
-  const std::string &name = get_next_oss_name();
+  const std::string name = get_next_oss_name();
 
   ObjectStoreOptions opts;
   opts.bmo.TOTAL_BUFFERS = 8 * 10;
   opts.bso.TOTAL_BLOCKS = FILE_SIZE / 8;
+  opts.bao.TOTAL_BLOCKS = FILE_SIZE / 8;
 
   {
     ObjectStore os(name, opts);
@@ -268,7 +271,8 @@ TEST(ObjectStore, RecoverAfterSafeExit) {
     for (int i = 0; i < 1; ++i) {
       names.push_back(std::string("obj") + std::to_string(i));
       contents.push_back(std::move(get_garbage(FILE_SIZE)));
-      threads.push_back(std::thread(object_sequential_write, std::ref(os), names[i], contents[i].c_str()));
+      threads.push_back(std::thread(object_sequential_write, std::ref(os), 
+                                    names[i], contents[i].c_str()));
     }
 
     for (auto &p: threads) {

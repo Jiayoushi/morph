@@ -60,13 +60,18 @@ void KvStore::init_db(const bool recovery) {
         name, ColumnFamilyOptions()));
     }
 
-    s = DB::Open(options, kv_name, column_families, &handles, &db);
+    std::vector<ColumnFamilyHandle *> hs;
+    s = DB::Open(options, kv_name, column_families, &hs, &db);
     if (!s.ok()) {
       std::cerr << "Failed to open(0) rocksdb: " << kv_name 
                 << " " << s.ToString() << std::endl;
       exit(EXIT_FAILURE);
     }
 
+    assert(hs.size() == 4);
+    for (ColumnFamilyHandle *handle: hs) {
+      handles.emplace(handle->GetName(), handle);
+    }
   } else {
     s = DB::Open(options, kv_name, &db);
     if (!s.ok()) {
@@ -81,7 +86,7 @@ void KvStore::init_db(const bool recovery) {
         std::cerr << "Failed to create column family: " << CF_NAMES[i] << s.ToString() << std::endl;
         exit(EXIT_FAILURE);
       }
-      handles.push_back(handle);
+      handles.emplace(CF_NAMES[i], handle);
     }
   }
 }
@@ -93,8 +98,8 @@ KvStore::~KvStore() {
     stop();
   }
 
-  for (auto handle: handles) {
-    s = db->DestroyColumnFamilyHandle(handle);
+  for (auto p = handles.begin(); p != handles.end(); ++p) {
+    s = db->DestroyColumnFamilyHandle(p->second);
     if (!s.ok()) {
       std::cerr << s.ToString() << std::endl;
       exit(EXIT_FAILURE);
@@ -131,8 +136,6 @@ void KvStore::write_routine() {
     }
 
     if (!flag_marked(closed_txns.front(), TXN_COMPLETE)) {
-      //fprintf(stderr, "txn(%lu) total(%lu) is not compelte, wait\n",
-      //  closed_txns.front()->id, closed_txns.size());
       std::this_thread::sleep_for(std::chrono::seconds(1));
       continue;
     }
@@ -140,8 +143,6 @@ void KvStore::write_routine() {
     transaction = closed_txns.pop();
 
     if (transaction->id != next_expected_txn) {
-      //fprintf(stderr, "txn id %lu   expected %lu\n",
-      //  transaction->id, next_expected_txn);
       assert(0);
     }
 
@@ -190,18 +191,13 @@ void KvStore::close_routine() {
     }
 
 		if (open_txn->has_handles()) {
-      //fprintf(stderr, "[kv] force close current open_txn %lu with %d handles\n",
-      //  open_txn->id,
-      //  opts.MAX_TXN_HANDLES - open_txn->handle_credit.load());
 			flag_mark(open_txn, TXN_CLOSED);
       if (open_txn->open_handles == 0) {
         flag_mark(open_txn, TXN_COMPLETE);
       }
 			closed_txns.push(open_txn);
 			open_txn = get_new_transaction();
-		} else {
-      //fprintf(stderr, "[kv] open_txn has no handles\n");
-    }
+		}
 	}
 }
 

@@ -41,8 +41,6 @@ std::vector<std::pair<lbn_t, uint32_t>> Object::delete_extent_range(
   uint32_t len;
   std::vector<std::pair<lbn_t, uint32_t>> remove_blocks;
 
-  //fprintf(stderr, "delete start(%d) end(%d)\n", del_start, del_end);
-
   while (true) {
     iter = extent_tree.lower_bound(del_start);
     if (iter == extent_tree.end() || iter->second.off_start > del_end) {
@@ -52,9 +50,6 @@ std::vector<std::pair<lbn_t, uint32_t>> Object::delete_extent_range(
     ext = iter->second;
 
     // Compute the mutual part
-    //fprintf(stderr, "found extent start(%d) end(%d)\n", 
-    //  ext.off_start, ext.off_end);
-
     mutual_start = std::max(del_start, ext.off_start);
     mutual_end = std::min(del_end, ext.off_end);
     len = mutual_end - mutual_start + 1;

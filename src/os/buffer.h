@@ -63,10 +63,16 @@ class Buffer: NoCopy {
     flags.mark(B_VALID);
   }
 
-  void copy_data(const char *data, uint32_t buf_offset, uint32_t data_offset, uint32_t size);
+  void copy_in(const char *data, uint32_t data_offset, 
+               uint32_t buf_offset, uint32_t size);
+
+  void copy_out(char *out_buf, uint32_t out_offset,
+                uint32_t buf_offset, uint32_t size);
 
   uint32_t buffer_size;
 
+  // Right now, this mutex is used to prevent concurrent access
+  // to the actual buf data, not other fields.
   std::mutex mutex;
 
   Flags<64> flags;
@@ -132,7 +138,6 @@ class BufferManager {
         assert(0);
       }
     }
-    //fprintf(stderr, " put buffer %d ref %d in the free list\n", buffer->lbn, buffer->ref);
     free_list.push_front(buffer);
     assert(free_list.size() <= opts.TOTAL_BUFFERS);
   }
@@ -141,16 +146,11 @@ class BufferManager {
     for (auto p = free_list.begin(); p != free_list.end(); ++p) {
       if (flag_marked((*p), B_VALID) && (*p)->lbn == lbn) {
         free_list.erase(p);
-        //fprintf(stderr, "REMOVE buffer(%d) from the freelist\n", lbn);
         return;
       }
     }
 
     std::cerr << lbn << " not in the free list " << std::endl;
-
-    //free_list.remove_if([lbn](Buffer * buf) {
-    //  return flag_marked(buf, B_VALID) && buf->lbn == lbn;
-    //  });
   }
 
   // Applies to any modification to index and free_list

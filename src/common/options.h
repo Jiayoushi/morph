@@ -24,11 +24,18 @@ const uint8_t JOURNAL_TRANSACTION_SYNC_INTERVAL  = 1;
 // TODO: recovery should happen automaticlaly when the "name" directory exists
 //       instead of using a boolean.
 
-struct BlockStoreOptions {
-  bool recover = false;
+struct BlockAllocatorOptions {
+  // Should not be greater than the TOTLA_BLOCKS
+  // specified in the BlockStoreOptions
   uint32_t TOTAL_BLOCKS = 10240;
+
+  uint8_t MAX_RETRY = 3;
+};
+
+struct BlockStoreOptions {
+  uint32_t TOTAL_BLOCKS = 10240;
+  bool recover = false;
   uint16_t block_size = 512;
-  uint8_t ALLOCATE_RETRY = 3;
   uint32_t min_num_event = 1;
   int max_num_event = 100;
 
@@ -58,9 +65,9 @@ struct ObjectStoreOptions {
 
   KvStoreOptions kso;
 
-  ObjectStoreOptions():
-    bso(), bmo(), kso()
-  {}
+  BlockAllocatorOptions bao;
+
+  ObjectStoreOptions() = default;
 };
 
 

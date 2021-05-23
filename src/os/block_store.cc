@@ -51,7 +51,6 @@ BlockStore::BlockStore(const std::string &name,
     assert(0);
   }
 
-  bitmap = std::make_unique<Bitmap>(opts.TOTAL_BLOCKS, opts.ALLOCATE_RETRY);
 
   submit_thread = std::make_unique<std::thread>(&BlockStore::submit_routine, this);
 
@@ -72,18 +71,6 @@ BlockStore::~BlockStore() {
     perror("failed to io_destory");
     assert(0);
   }
-
-  //fprintf(stderr, "block store exited\n");
-}
-
-// TODO: should these belong to the allocator class?
-lbn_t BlockStore::allocate_blocks(uint32_t count) {
-  return bitmap->allocate_blocks(count);
-}
-
-// TODO: same as above
-void BlockStore::free_blocks(lbn_t start_block, uint32_t count) {
-  bitmap->free_blocks(start_block, count);
 }
 
 void BlockStore::submit_request(IoRequest *request) {
@@ -97,9 +84,9 @@ void BlockStore::submit_write(IoRequest *request, struct iocb *iocb) {
   for (Buffer *buffer: request->buffers) {
     if (!flag_marked(buffer, B_DIRTY)) {
       if (++request->completed == request->buffers.size()) {
-        //fprintf(stderr, "request(%lu) is ready. exit now\n", request->get_id());
         request->after_complete_callback();
         request->notify_complete();
+        delete request;
         break;
       }
 
@@ -133,8 +120,6 @@ void BlockStore::submit_write(IoRequest *request, struct iocb *iocb) {
     offset += opts.block_size;
   }
 
-  //fprintf(stderr, "io_submit write req(%lu) done\n\n",
-  //  request->get_id());
 }
 
 void BlockStore::submit_read(IoRequest *request, struct iocb *iocb) {
@@ -162,7 +147,6 @@ void BlockStore::submit_read(IoRequest *request, struct iocb *iocb) {
     offset += opts.block_size;
   }
 
-  //fprintf(stderr, "io_submit read done\n");
 }
 
 // TODO: right now, the io is submitted once for each io_request
@@ -182,7 +166,7 @@ void BlockStore::submit_routine() {
       break;
     }
 
-    if (request->op == OP_WRITE) {
+    if (request->op == OP_SMALL_WRITE || request->op == OP_LARGE_WRITE) {
       submit_write(request, iocb);
     } else if (request->op == OP_READ) {
       submit_read(request, iocb);
@@ -212,14 +196,11 @@ void BlockStore::reap_routine() {
         break;
       } else {
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        //fprintf(stderr, "sleep num_in_progress %d\n", num_in_progress.load());
         continue;
       }
     }
 
-    //fprintf(stderr, "enter io_getevents\n");
     num_events = io_getevents(ioctx, opts.min_num_event, opts.max_num_event, events, &timeout);
-    //fprintf(stderr, "leave io_getevents\n");
 
     if (num_events < 0) {
       if (num_events == -EINTR) {
@@ -230,11 +211,8 @@ void BlockStore::reap_routine() {
         assert(0);
       }
     } else if (num_events == 0) {
-      //fprintf(stderr, "[bs] 0 events reaped. num_in_progress=%d\n",
-      //  num_in_progress.load());
       continue;
     }
-    //fprintf(stderr, "[bs] num_events[%d] num_in_progress=%lu\n", num_events, num_in_progress.load());
 
     for (uint32_t i = 0; i < num_events; ++i) {
       event = events[i];
@@ -242,13 +220,14 @@ void BlockStore::reap_routine() {
       assert(event.res == request->buffers.front()->buffer_size);
 
       if (++request->completed == request->buffers.size()) {
-        //fprintf(stderr, "[bs] req(%lu) is done, going to call callbacks\n", request->get_id());
         request->after_complete_callback();
+        if (request->op == OP_SMALL_WRITE) {
+          delete request;
+        }
       }
     }
 
     num_in_progress -= num_events;
-    //fprintf(stderr, "[bs] reap %d  left %d\n", num_events, num_in_progress.load());
   }
 
   free(events);
@@ -256,18 +235,14 @@ void BlockStore::reap_routine() {
 
 void BlockStore::stop() {
   while (!io_requests.empty()) {
-    //fprintf(stderr, "[bs] io_requests is not empty, waiting...\n");
     std::this_thread::sleep_for(std::chrono::seconds(1));
   }
-  //fprintf(stderr, "[bs] io_requests are all done, exit...\n");
 
   io_requests.push(nullptr);
   submit_thread->join();
-  //fprintf(stderr, "[bs] submit_thread joined\n");
 
   running = false;
   reap_thread->join();
-  //fprintf(stderr, "[bs] reap_thread joined\n");
 
   assert(num_in_progress == 0);
   assert(io_requests.empty());

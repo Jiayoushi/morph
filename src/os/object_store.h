@@ -6,10 +6,12 @@
 #include <cstdint>
 #include <cassert>
 #include <unordered_map>
-#include <os/block_store.h>
-#include <os/buffer.h>
-#include <os/kv_store.h>
-#include <os/object.h>
+
+#include "block_store.h"
+#include "buffer.h"
+#include "kv_store.h"
+#include "object.h"
+#include "block_allocator.h"
 
 namespace morph {
 
@@ -65,9 +67,10 @@ class ObjectStore {
                             const std::string &data,
                             std::function<void(void)> on_apply);
 
-    Buffer * get_block(std::shared_ptr<Object> object, lbn_t lbn, 
-                      lbn_t lbn_end = 0, bool create = false, 
-                      uint32_t new_blocks = 0);
+    Buffer * get_block(std::shared_ptr<Object> object, lbn_t lbn,
+                      LogHandle *log_handle=nullptr,
+                      lbn_t lbn_end=0, bool create=false, 
+                      uint32_t new_blocks=0);
 
   /*
    * Copies the data in "data_ptr" to buffer.
@@ -101,8 +104,9 @@ class ObjectStore {
 
   // Called by the kv_store after a write call is journaled
   void post_log(IoRequest *request) {
-    //fprintf(stderr, "[os] submitting write request(%lu)\n", 
-    //  request->get_id());
+    for (Buffer *buffer: request->buffers) {
+      buffer->mutex.lock();
+    }
     block_store.submit_request(request);
   }
 
@@ -111,8 +115,8 @@ class ObjectStore {
 
   void after_read(IoRequest *request, bool finished);
 
-  void read_buffer(const std::shared_ptr<Object> &object, 
-                   Buffer *buffer);
+  void read_buffer_from_disk(const std::shared_ptr<Object> &object, 
+                             Buffer *buffer);
 
   // Read the metadata and replay the data log after restart or crash
   void recover();
@@ -140,16 +144,12 @@ class ObjectStore {
   }
 
   bool has_pending_operations() const {
-    //fprintf(stderr, "unfished_writes %u reads %u\n",
-    //  unfinished_writes.load(), unfinished_reads.load());
     return unfinished_writes > 0 || unfinished_reads > 0;
   }
 
-  IoRequest *start_request(IoOperation operation) {
+  IoRequest *allocate_request(IoOperation operation) {
     IoRequest *request = new IoRequest(assign_request_id(), operation);
     
-    assert(operation == OP_READ || operation == OP_WRITE);
-
     if (operation == OP_READ) {
       ++unfinished_reads;
     } else {
@@ -165,7 +165,6 @@ class ObjectStore {
     } else {
       --unfinished_writes;
     }
-    delete request;
   }
 
   std::string name;
@@ -177,6 +176,8 @@ class ObjectStore {
   BufferManager buffer_manager;
 
   KvStore kv_store;
+
+  BlockAllocator block_allocator;
 
   std::recursive_mutex index_mutex;
 

@@ -62,6 +62,7 @@ add_executable(block_store_test
   src/os/block_allocator.cc
   src/os/block_store.cc
   src/os/buffer.cc
+  src/os/transaction.cc
   src/tests/os/block_store_test.cc)
 add_executable(object_store_test
   ${COMMON_SRC_FILES}
@@ -131,7 +132,12 @@ target_link_libraries(integration_test
   /usr/lib/x86_64-linux-gnu/libz.so)
 target_link_libraries(block_store_test
   gtest
-  -laio)
+  -laio
+  /usr/local/lib/librocksdb.a
+  /usr/lib/x86_64-linux-gnu/libsnappy.so
+  /usr/lib/x86_64-linux-gnu/liblz4.so.1
+  /usr/lib/x86_64-linux-gnu/libdl.so
+  /usr/lib/x86_64-linux-gnu/libz.so)
 target_link_libraries(third_party_test
   gtest
   /usr/local/lib/librocksdb.a

@@ -8,10 +8,16 @@ namespace morph {
 
 namespace os {
 
-void Buffer::copy_data(const char *data, uint32_t buf_offset, 
-    uint32_t data_offset, uint32_t size) {
+void Buffer::copy_in(const char *data, uint32_t data_offset, 
+                     uint32_t buf_offset, uint32_t size) {
   std::lock_guard<std::mutex> lock(mutex);
   memcpy(buf + buf_offset, data + data_offset, size);
+}
+
+void Buffer::copy_out(char *out_buf, uint32_t out_offset, 
+                      uint32_t buf_offset, uint32_t size) {
+  std::lock_guard<std::mutex> lock(mutex);
+  memcpy(out_buf + out_offset, buf + buf_offset, size);
 }
 
 BufferManager::BufferManager():

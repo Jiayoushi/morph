@@ -1,5 +1,1 @@
-1. split the allocation and extent tree into blocks
-2. add buffers to transaction, not handle
-3. when add buffers to transaction, need to duplicate the buffer in case there 
-   is already a buffer with the same block
-4. 
+1. There are now 4 different places to delete request, this is pretty insanely ugly.

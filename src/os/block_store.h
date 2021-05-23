@@ -25,7 +25,8 @@ class Buffer;
 
 enum IoOperation {
   OP_READ = 0,
-  OP_WRITE = 1,
+  OP_SMALL_WRITE = 1,
+  OP_LARGE_WRITE = 2
 };
 
 
@@ -89,27 +90,7 @@ class BlockStore: NoCopy {
 
   ~BlockStore();
 
-  lbn_t allocate_blocks(uint32_t count);
-
-  void free_blocks(lbn_t start_block, uint32_t count);
-
-  uint32_t free_block_count() {
-    return bitmap->free_blocks_count();
-  }
-
   void submit_request(IoRequest *request);
-
-
-  // TODO: this is gonna be slow if the entire bitmap is serialized everytime it's modified
-  // TODO: and along with the put, free, shouldn't these belong to the allocator itself?
-  //       it's pretty verbose for now.
-  std::string serialize_bitmap() {
-    return bitmap->serialize();
-  }
-
-  void deserialize_bitmap(const std::string &v) {
-    bitmap->deserialize(v);
-  }
 
   void stop();
 
@@ -124,11 +105,10 @@ class BlockStore: NoCopy {
 
   void reap_routine();
 
+
   const std::string name;
 
   int fd;
-
-  std::unique_ptr<Bitmap> bitmap;
 
   std::atomic<bool> running;
 
