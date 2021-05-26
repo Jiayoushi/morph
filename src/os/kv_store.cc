@@ -181,7 +181,7 @@ void KvStore::flush_routine() {
 }
 
 void KvStore::close_routine() {
-	while (running) {
+  while (running) {
     std::this_thread::sleep_for(std::chrono::seconds(1));
 
     std::lock_guard<std::mutex> lock(mutex);
