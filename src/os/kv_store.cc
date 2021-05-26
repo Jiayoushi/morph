@@ -182,23 +182,23 @@ void KvStore::flush_routine() {
 
 void KvStore::close_routine() {
 	while (running) {
-		std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::this_thread::sleep_for(std::chrono::seconds(1));
 
-		std::lock_guard<std::mutex> lock(mutex);
+    std::lock_guard<std::mutex> lock(mutex);
 
     if (open_txn == nullptr) {
       continue;
     }
 
-		if (open_txn->has_handles()) {
-			flag_mark(open_txn, TXN_CLOSED);
+    if (open_txn->has_handles()) {
+      flag_mark(open_txn, TXN_CLOSED);
       if (open_txn->open_handles == 0) {
         flag_mark(open_txn, TXN_COMPLETE);
       }
-			closed_txns.push(open_txn);
-			open_txn = get_new_transaction();
-		}
-	}
+      closed_txns.push(open_txn);
+      open_txn = get_new_transaction();
+    }
+  }
 }
 
 void KvStore::stop() {
