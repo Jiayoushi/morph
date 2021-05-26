@@ -16,13 +16,16 @@ namespace mds {
 MetadataServer::MetadataServer(const std::string &name,
                                const NetworkAddress &mds_addr,
                                const monitor::Config &monitor_config) {
+  bool recover = file_exists(name.c_str());
+
   logger = init_logger(name);
   assert(logger != nullptr);
 
   logger->debug("logger initialized");
 
   // Create metadata service
-  service = std::make_unique<MetadataServiceImpl>(name, monitor_config, logger);
+  service = std::make_unique<MetadataServiceImpl>(name, mds_addr, monitor_config,
+                                                  logger, recover);
 
   // Create metadata server
   ServerBuilder builder;

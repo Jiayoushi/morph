@@ -39,7 +39,6 @@ ObjectStoreServiceImpl::ObjectStoreServiceImpl(
   // Connect to the primary monitor
   const std::string &primary_monitor_name = monitor_config.infos.front().name;
   primary_monitor = monitor_cluster.get_instance(primary_monitor_name);
-  primary_monitor->connect();
 
   // Add this oss to the cluster
   add_this_oss_to_cluster();
@@ -103,6 +102,7 @@ void ObjectStoreServiceImpl::update_oss_cluster() {
   GetOssClusterReply reply;
   grpc::ClientContext ctx;
 
+  req.set_requester(this_name.c_str());
   req.set_version(oss_cluster.get_version());
   auto s = primary_monitor->stub->get_oss_cluster(&ctx, req, &reply);
   assert(s.ok());
@@ -112,6 +112,10 @@ void ObjectStoreServiceImpl::update_oss_cluster() {
     return;
   } else if (reply.version() < oss_cluster.get_version()) {
     assert(false);
+  }
+
+  for (auto p = reply.info().cbegin(); p != reply.info().cend(); ++p) {
+    oss_cluster.add_instance(p->name(), p->addr());
   }
 
   std::unordered_map<std::string, NetworkAddress> m;
@@ -153,8 +157,8 @@ grpc::Status ObjectStoreServiceImpl::put_object(ServerContext *context,
 }
 
 grpc::Status ObjectStoreServiceImpl::get_object(ServerContext *context, 
-                                                const GetObjectRequest *request,
-                                                GetObjectReply *reply) {
+                                              const GetObjectRequest *request,
+                                              GetObjectReply *reply) {
   uint8_t ret_val;
   std::string *buf = new std::string();
 
@@ -174,31 +178,40 @@ grpc::Status ObjectStoreServiceImpl::get_object(ServerContext *context,
 }
 
 grpc::Status ObjectStoreServiceImpl::delete_object(ServerContext *context, 
-                                                   const DeleteObjectRequest *request,
-                                                   DeleteObjectReply *reply) {
+                                            const DeleteObjectRequest *request,
+                                            DeleteObjectReply *reply) {
   return grpc::Status::OK;
 }
 
 grpc::Status ObjectStoreServiceImpl::put_metadata(ServerContext *context, 
-                                                  const PutMetadataRequest *request,
-                                                  PutMetadataReply *reply) {
+                                              const PutMetadataRequest *request,
+                                              PutMetadataReply *reply) {
   uint8_t ret_val;
   
   ret_val = object_store.put_metadata(request->object_name(), 
-    request->attribute(), request->value());
+    request->attribute(), request->create_object(), request->value());
 
   reply->set_ret_val(ret_val);
   return grpc::Status::OK;
 }
 
 grpc::Status ObjectStoreServiceImpl::get_metadata(ServerContext *context, 
-                                                  const GetMetadataRequest *request,
-                                                  GetMetadataReply *reply) {
+                                              const GetMetadataRequest *request,
+                                              GetMetadataReply *reply) {
   uint8_t ret_val;
   std::string *buf = new std::string();
 
+  logger->info(fmt::sprintf(
+    "asked for object %s metadata %s\n",
+    request->object_name().c_str(), request->attribute()));
+
   ret_val = object_store.get_metadata(request->object_name(), 
                                       request->attribute(), buf);
+
+  logger->info(fmt::sprintf(
+    "asked for object %s metadata %s. Returned[%d].\n",
+    request->object_name().c_str(), request->attribute(),
+    ret_val));
 
   reply->set_ret_val(ret_val);
   reply->set_allocated_value(buf);
@@ -206,8 +219,8 @@ grpc::Status ObjectStoreServiceImpl::get_metadata(ServerContext *context,
 }
 
 grpc::Status ObjectStoreServiceImpl::delete_metadata(ServerContext *context, 
-                                                     const DeleteMetadataRequest *request, 
-                                                     DeleteMetadataReply *reply) {
+                                          const DeleteMetadataRequest *request, 
+                                          DeleteMetadataReply *reply) {
   uint8_t ret_val;
   
   // TODO(urgent): add a "expect_primary" field to the request
@@ -271,10 +284,6 @@ void ObjectStoreServiceImpl::replicate(Operation *op) {
     if (op->op_type == PUT_OBJECT) {
       auto backup_oss = replication_group[i];
 
-      if (!backup_oss->connected()) {
-        backup_oss->connect();
-      }
-
       grpc::ClientContext ctx;
       PutObjectRequest request;
       PutObjectReply reply;
@@ -313,8 +322,8 @@ void ObjectStoreServiceImpl::on_op_finish(Operation *op) {
 bool ObjectStoreServiceImpl::is_replication_group(
       const std::string &object_name,
       bool expect_primary) {
-  std::vector<std::string> names = oss_cluster.get_cluster_names();
-  std::vector<std::string> group = assign_group(names, object_name, 3);
+  std::vector<std::string> group = 
+    assign_group(oss_cluster.get_cluster_names(), object_name, 3);
 
   if (expect_primary) {
     return group[0] == this_name;
@@ -325,8 +334,8 @@ bool ObjectStoreServiceImpl::is_replication_group(
 
 ReplicationGroup ObjectStoreServiceImpl::get_replication_group(
                                                const std::string &object_name) {
-  std::vector<std::string> names = oss_cluster.get_cluster_names();
-  std::vector<std::string> group = assign_group(names, object_name, 3);
+  std::vector<std::string> group = assign_group(
+    oss_cluster.get_cluster_names(), object_name, 3);
   ReplicationGroup result;
 
   for (const auto &g: group) {

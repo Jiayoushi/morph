@@ -54,7 +54,7 @@ bool Reader::read_record(Slice *record, std::string *scratch) {
 
       case FIRST_TYPE:
         if (in_fragmented_record) {
-          assert(!scratch->empty());
+          assert(scratch->empty());
         }
         prospective_record_offset = physical_record_offset;
         scratch->assign(fragment.data(), fragment.size());
@@ -100,8 +100,8 @@ bool Reader::read_record(Slice *record, std::string *scratch) {
         assert(false);  
       }
     }
-    return false;
   }
+  return false;
 }
 
 unsigned int Reader::read_physical_block(Slice *result) {
@@ -152,12 +152,13 @@ unsigned int Reader::read_physical_block(Slice *result) {
     }
 
     if (checksum) {
-      uint32_t expected_crc = crc32c::unmask(morph::decode_fixed_32(header));
-      uint32_t actual_crc = crc32c::crc32_fast(header + 6, 1 + length);
+      uint32_t actual_crc = crc32c::unmask(morph::decode_fixed_32(header));
+      uint32_t expected_crc = crc32c::crc32_fast(header + 6, 1 + length);
       if (actual_crc != expected_crc) {
         size_t drop_size = buffer.size();
         buffer.clear();
-        fprintf(stderr, "drop_size %lu checksum mismatched", drop_size);
+        fprintf(stderr, "drop_size %lu checksum mismatched expected %u actual %u\n", 
+                drop_size, expected_crc, actual_crc);
         return BAD_RECORD;
       }
     }

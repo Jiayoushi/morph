@@ -4,6 +4,7 @@
 #include <grpcpp/grpcpp.h>
 #include <proto_out/monitor.grpc.pb.h>
 #include <proto_out/oss.grpc.pb.h>
+#include <proto_out/mds.grpc.pb.h>
 
 #include "common/cluster.h"
 #include "common/logger.h"
@@ -32,6 +33,11 @@ class MonitorServiceImpl final: public monitor_rpc::MonitorService::Service {
                        const AddOssRequest *request, 
                        AddOssReply *reply) override;
 
+  grpc::Status add_mds(ServerContext *context, 
+                       const AddMdsRequest *request, 
+                       AddMdsReply *reply) override;
+
+
   grpc::Status remove_oss(ServerContext *context, 
                           const RemoveOssRequest *request, 
                           RemoveOssReply *reply) override;
@@ -48,12 +54,9 @@ class MonitorServiceImpl final: public monitor_rpc::MonitorService::Service {
 
   std::shared_ptr<spdlog::logger> logger;
 
-  //ClusterManager cluster_manager;
-
   bool is_primary_monitor;
   Cluster<monitor_rpc::MonitorService> monitor_cluster;
-
-  std::mutex oss_cluster_mutex;
+  Cluster<mds_rpc::MetadataService> mds_cluster;
   Cluster<oss_rpc::ObjectStoreService> oss_cluster;
 
   std::atomic<bool> running;

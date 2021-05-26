@@ -19,7 +19,7 @@ using GrpcOssService = oss_rpc::ObjectStoreService::Service;
 using MonitorStub = monitor_rpc::MonitorService::Stub;
 using OssStub = oss_rpc::ObjectStoreService::Stub;
 using ReplicationGroup = 
-  std::vector<Cluster<ObjectStoreService>::ServiceInstance *>;
+  std::vector<std::shared_ptr<Cluster<ObjectStoreService>::ServiceInstance>>;
 
 class ObjectStoreServiceImpl final: public GrpcOssService {
  public:
@@ -61,6 +61,9 @@ class ObjectStoreServiceImpl final: public GrpcOssService {
                                   UpdateOssClusterReply *reply);
 
  private:
+  using MonitorServiceInstance = 
+    Cluster<monitor_rpc::MonitorService>::ServiceInstance;
+
 
   enum OperationType {
     PUT_OBJECT = 0,
@@ -96,8 +99,7 @@ class ObjectStoreServiceImpl final: public GrpcOssService {
 
   void on_op_finish(Operation *op);
 
-  std::vector<Cluster<ObjectStoreService>::ServiceInstance *> 
-    get_replication_group(const std::string &object_name);
+  ReplicationGroup get_replication_group(const std::string &object_name);
 
   // Check if this oss is responsible for storeing this object
   // If "expect_primary" is set, this oss must be the primary.
@@ -113,7 +115,7 @@ class ObjectStoreServiceImpl final: public GrpcOssService {
 
   ObjectStore object_store;
   
-  Cluster<monitor_rpc::MonitorService>::ServiceInstance *primary_monitor;
+  std::shared_ptr<MonitorServiceInstance> primary_monitor;
   Cluster<monitor_rpc::MonitorService> monitor_cluster;
 
   Cluster<oss_rpc::ObjectStoreService> oss_cluster;

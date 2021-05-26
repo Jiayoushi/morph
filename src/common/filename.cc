@@ -41,10 +41,18 @@ std::string kv_wal_file_name(const std::string &name) {
   return make_file_name(name, "kv_wal");
 }
 
-uint64_t get_number(const std::string &filename) {
+uint64_t get_filename_number(const std::string &filename) {
   size_t dot = filename.find('.');
   assert(dot != std::string::npos);
   return stoul(filename.substr(0, dot), 0, 10);
+}
+
+std::string get_filename_suffix(const std::string &filename) {
+  size_t dot = filename.find_last_of('.');
+  if (dot == std::string::npos) {
+    return "";
+  }
+  return filename.substr(dot + 1, filename.size());
 }
 
 } // namespace morph

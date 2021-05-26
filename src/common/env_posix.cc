@@ -215,4 +215,11 @@ Status create_directory(const std::string &dirname) {
   return Status::ok();
 }
 
+Status unlink(const std::string &pathname) {
+  if (::unlink(pathname.c_str()) != 0) {
+    return posix_error(pathname, errno);
+  }
+  return Status::ok();
+}
+
 } // namespace morph

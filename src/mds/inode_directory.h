@@ -10,19 +10,21 @@ namespace mds {
 struct Dentry {
   std::string name;
   ino_t ino;
+  type_t type;      // It's duplicated to allow easy cast
+
   Inode *inode;
 
   Dentry() {}
   Dentry(const std::string &name, const InodeNumber ino,
-         Inode *inode=nullptr):
-    name(name), ino(ino), inode(inode) {}
+         const type_t type, Inode *inode):
+    name(name), ino(ino), type(type), inode(inode) {}
 
-  MSGPACK_DEFINE_ARRAY(name, ino);
+  MSGPACK_DEFINE_ARRAY(name, ino, type);
 };
 
 class InodeDirectory: public Inode {
  public:
-  InodeDirectory() = delete;
+  InodeDirectory()=default;
 
   InodeDirectory(const type_t type, const InodeNumber ino, const mode_t mode, 
                  const uid_t uid):
@@ -36,20 +38,33 @@ class InodeDirectory: public Inode {
 
   Dentry * find_child(const char *name);
 
-  void add_child(const std::string &name, const ino_t ino, 
-                 Inode *child=nullptr) {
-    children.push_back(new Dentry(name, ino, child));
+  void add_child(const std::string &name, const ino_t ino,
+                 const type_t type, Inode *child) {
+    children.push_back(new Dentry(name, ino, type, child));
   }
 
   void remove_child(InodeNumber ino);
 
-  bool empty() {
+  bool empty() const {
     return children.empty();
+  }
+
+  size_t size() const {
+    return children.size();
   }
 
   Dentry * get_child(int index) {
     assert(index >= 0 && index <= children.size());
     return children[index];
+  }
+
+  Dentry * get_child_by_ino(ino_t ino) {
+    for (auto p = children.begin(); p != children.end(); ++p) {
+      if ((*p)->ino == ino) {
+        return *p;
+      }
+    }
+    return nullptr;
   }
 
   std::string serialize() {
@@ -76,11 +91,11 @@ class InodeDirectory: public Inode {
 
     oh = unpack(s.data(), s.size(), offset);
     size = oh.get().as<size_t>();
-    
+
     for (size_t i = 0; i < size; ++i) {
       oh = unpack(s.data(), s.size(), offset);
       Dentry dentry = oh.get().as<Dentry>();
-      add_child(dentry.name.c_str(), dentry.ino);
+      add_child(dentry.name.c_str(), dentry.ino, dentry.type, nullptr);
     }
   }
 

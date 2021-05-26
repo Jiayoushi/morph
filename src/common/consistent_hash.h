@@ -5,6 +5,7 @@
 #include <string>
 #include <map>
 #include <cassert>
+#include <memory>
 
 namespace morph {
 
@@ -15,6 +16,10 @@ int assign(const std::vector<std::string> &buckets,
 // to name will lead to collision
 std::vector<std::string> assign_group(const std::vector<std::string> &buckets,
                                      const std::string &item, const int size=3);
+
+std::vector<std::string> assign_group(const std::shared_ptr<std::vector<std::string>> &buckets,
+                                     const std::string &item, const int size=3);
+
 
 } // namespace morph
 

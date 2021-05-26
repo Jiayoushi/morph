@@ -29,7 +29,7 @@ class Inode: NoCopy {
 
   MSGPACK_DEFINE_ARRAY(type, ino, mode, uid, links);
 
-  Inode() = delete;
+  Inode() = default;
 
   virtual ~Inode() {}
 

@@ -3,6 +3,7 @@
 
 #include <proto_out/mds.grpc.pb.h>
 #include <proto_out/monitor.grpc.pb.h>
+#include <proto_out/oss.grpc.pb.h>
 
 #include "namespace.h"
 #include "monitor/config.h"
@@ -21,8 +22,10 @@ using namespace mds_rpc;
 class MetadataServiceImpl final: public mds_rpc::MetadataService::Service {
  public:
   MetadataServiceImpl(const std::string &name,
+                      const NetworkAddress &addr,
                       const monitor::Config &monitor_config,
-                      std::shared_ptr<spdlog::logger> logger);
+                      const std::shared_ptr<spdlog::logger> logger,
+                      const bool recover);
 
   ~MetadataServiceImpl() {}
 
@@ -41,16 +44,42 @@ class MetadataServiceImpl final: public mds_rpc::MetadataService::Service {
   grpc::Status readdir(ServerContext *context, const ReaddirRequest *request, 
                        ReaddirReply *reply) override;
 
+  grpc::Status update_oss_cluster(ServerContext *context,
+                                  const UpdateOssClusterRequest *request,
+                                  UpdateOssClusterReply *reply) override;
+
  private:
+  void register_mds_to_monitor();
+
+  std::string get_inode_from_oss(const std::string &name);
+
+  Status recover();
+
+  Status sync_log_to_oss(const std::string &file);
+
+  void oss_put(const Slice &key, const Slice &value);
+
+  void oss_del(const Slice &key, const Slice &value);
+
+  void update_oss_cluster();
+
+
+  const std::string this_name;
+
+  const NetworkAddress this_addr;
+
   std::shared_ptr<spdlog::logger> logger;
 
-  Namespace name_space;
+  std::shared_ptr<Cluster<monitor_rpc::MonitorService>::ServiceInstance> primary_monitor;
+  Cluster<monitor_rpc::MonitorService> monitor_cluster;
 
-  std::shared_ptr<MonitorService::Stub> monitor;
+  std::mutex oss_cluster_mutex;
+  Cluster<oss_rpc::ObjectStoreService> oss_cluster;
+
+  Namespace name_space;
 };
 
-}
-
-}
+} // namespace mds
+} // namespace morph
 
 #endif

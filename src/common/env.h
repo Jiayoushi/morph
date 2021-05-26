@@ -64,6 +64,8 @@ Status get_children(const std::string& directory_path,
 
 Status create_directory(const std::string &name);
 
+Status unlink(const std::string &pathname);
+
 } // namespace morph
 
 #endif

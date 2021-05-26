@@ -55,6 +55,7 @@ TEST(Monitor, BasicOperation) {
 
   {
     grpc::ClientContext ctx;
+    get_oss_cluster_request.set_requester("oss1");
     get_oss_cluster_request.set_version(version);
     s = stub->get_oss_cluster(&ctx, get_oss_cluster_request, 
                               &get_oss_cluster_reply);

@@ -68,7 +68,7 @@ void delete_directory(const std::string &pathname) {
       delete_directory(entry_full_pathname.c_str());
     } else {
 
-      if (unlink(entry_full_pathname.c_str()) < 0) {
+      if (::unlink(entry_full_pathname.c_str()) < 0) {
         perror(entry_full_pathname.c_str());
         exit(EXIT_FAILURE);
       }

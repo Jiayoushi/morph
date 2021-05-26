@@ -12,6 +12,7 @@ using morph::os::ObjectStore;
 using morph::ObjectStoreOptions;
 using morph::get_garbage;
 using morph::delete_directory;
+using morph::os::lbn_t;
 
 // TODO: after each test, it is required to start a new instance
 //       and read from the disk to make sure the writes are actually
@@ -99,11 +100,10 @@ void cleanup(const std::string &rocks_file, const std::string &rocks_wal_file) {
 
 TEST(ObjectStore, ObjectExtent) {
   using namespace morph::os;
-  using morph::lbn_t;
 
   Extent ext;
   Object obj("obj1");
-  std::vector<std::pair<morph::lbn_t, uint32_t>> blks;
+  std::vector<std::pair<lbn_t, uint32_t>> blks;
 
   ASSERT_FALSE(obj.search_extent(1, &ext));
   ASSERT_FALSE(ext.valid());
@@ -303,7 +303,7 @@ TEST(ObjectStore, BasicObjectMetadataOperations) {
   ret_val = os.put_object("obj", 0, "");
   ASSERT_EQ(ret_val, 0);
 
-  ret_val = os.put_metadata("obj", "nice", "xx");
+  ret_val = os.put_metadata("obj", "nice", false, "xx");
   ASSERT_EQ(ret_val, 0);
 
   ret_val = os.get_metadata("obj", "nice", &buf);
@@ -350,7 +350,7 @@ TEST(ObjectStore, ConcurrentGetPutMetadata) {
         get_garbage(attribute);
         get_garbage(value);
 
-        ret_val = os.put_metadata(object_name, attribute, value);
+        ret_val = os.put_metadata(object_name, attribute, false, value);
         ASSERT_EQ(ret_val, 0);
 
         ret_val = os.get_metadata(object_name, attribute, &buf);

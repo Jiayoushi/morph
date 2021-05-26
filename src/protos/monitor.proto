@@ -3,9 +3,17 @@ syntax = "proto3";
 package monitor_rpc;
 
 service MonitorService {
-  rpc get_oss_cluster(GetOssClusterRequest) returns (GetOssClusterReply) {};
   rpc add_oss(AddOssRequest) returns (AddOssReply) {};
+  rpc add_mds(AddMdsRequest) returns (AddMdsReply) {};
+
+  rpc get_oss_cluster(GetOssClusterRequest) returns (GetOssClusterReply) {};
+
   rpc remove_oss(RemoveOssRequest) returns (RemoveOssReply) {};
+}
+
+message MdsInfo {
+  string name = 1;
+  string addr = 2;
 }
 
 message OssInfo {
@@ -15,6 +23,7 @@ message OssInfo {
 
 message GetOssClusterRequest {
   uint64 version = 1;
+  string requester = 2;
 }
 
 message GetOssClusterReply {
@@ -28,6 +37,14 @@ message AddOssRequest {
 }
 
 message AddOssReply {
+  int32 ret_val = 1;
+}
+
+message AddMdsRequest {
+  MdsInfo info = 1;
+}
+
+message AddMdsReply {
   int32 ret_val = 1;
 }
 

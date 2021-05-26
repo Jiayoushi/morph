@@ -14,9 +14,7 @@ TEST(NamespaceTest, BasicFileOperation) {
   using namespace mds_rpc;
   using namespace google::protobuf;
 
-  Namespace name_space("mds");
-  morph::Status s = name_space.open(create_test_logger("BasicFileOperation"));
-  ASSERT_TRUE(s.is_ok());
+  Namespace name_space("mds", false);
 
   FileStat stat;
   DirRead dir;
@@ -64,49 +62,11 @@ TEST(NamespaceTest, BasicFileOperation) {
   ASSERT_EQ(name_space.rmdir(0, "/nice/nice2/nice3"), 0);
   ASSERT_EQ(name_space.rmdir(0, "/nice/nice2"), 0);
   ASSERT_EQ(name_space.rmdir(0, "/nice"), 0);
+
+  delete_directory("mds");
 }
 
-/*
-TEST(NamespaceTest, RecoverFromLogFile) {
-  using namespace morph::mds;
-  using namespace mds_rpc;
 
-  const int TOTAL_CREATE = 100;
-  Namespace *name_space;
-  morph::Status s;
-  std::string path;
-  FileStat stat;
-
-  name_space = new Namespace("mds");
-  s = name_space->open(create_test_logger("RecoverFromLogFile1"));
-  ASSERT_TRUE(s.is_ok());
-  path.reserve(TOTAL_CREATE * 2);
-
-  for (uint32_t i = 0; i < TOTAL_CREATE; ++i) {
-    path.append("/x");
-    ASSERT_EQ(name_space->mkdir(i, path.c_str(), i), 0);
-    ASSERT_EQ(name_space->stat(i, path.c_str(), &stat), 0);
-    ASSERT_EQ(stat.ino(), i + 2);
-    ASSERT_EQ(stat.mode(), i);
-    ASSERT_EQ(stat.uid(), i);
-  }
-
-  delete name_space;
-
-  path.clear();
-  name_space = new Namespace("mds");
-  s = name_space->open(create_test_logger("RecoverFromLogFile2"));
-  ASSERT_TRUE(s.is_ok());
-  for (uint32_t i = 0; i < TOTAL_CREATE; ++i) {
-    path.append("/x");
-    ASSERT_EQ(name_space->stat(i, path.c_str(), &stat), 0);
-    ASSERT_EQ(stat.ino(), i + 2);
-    ASSERT_EQ(stat.mode(), i);
-    ASSERT_EQ(stat.uid(), i);
-  }
-
-  delete name_space;
-}*/
 
 } // namespace mds
 } // namespace test

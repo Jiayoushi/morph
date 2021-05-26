@@ -10,6 +10,11 @@ namespace morph {
 
 static const int REPLICATION_FACTOR = 100;
 
+std::vector<std::string> assign_group(const std::shared_ptr<std::vector<std::string>> &buckets,
+                                     const std::string &item, const int size) {
+  return assign_group(*buckets, item, size);
+}
+
 std::vector<std::string> assign_group(const std::vector<std::string> &buckets,
                                       const std::string &item, const int size) {
   std::vector<std::string> result;

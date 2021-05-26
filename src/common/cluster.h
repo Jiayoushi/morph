@@ -37,12 +37,12 @@ struct Info {
 };
 
 
-
 template <typename Service>
 class Cluster {
  public:
   using StubType = typename Service::Stub;
 
+  // TODO: move this outside since other code need to access it
   struct ServiceInstance {
     std::string name;
     NetworkAddress addr;
@@ -52,72 +52,79 @@ class Cluster {
 
     ServiceInstance(const std::string &name,
                     const NetworkAddress &addr):
-        name(name), addr(addr), stub(nullptr) {}
+        name(name), addr(addr), stub(nullptr) {
+      std::shared_ptr<grpc::Channel> ch = 
+          grpc::CreateChannel(addr, grpc::InsecureChannelCredentials());
+      assert(ch != nullptr);
+      stub = Service::NewStub(ch).release();
+      assert(stub != nullptr);
+    }
 
     ~ServiceInstance() {
       delete stub;
     }
-
-    bool connected() const {
-      return stub != nullptr;
-    }
-
-    void connect() {
-      std::shared_ptr<grpc::Channel> ch = 
-        grpc::CreateChannel(addr, grpc::InsecureChannelCredentials());
-      assert(ch != nullptr);
-      stub = Service::NewStub(ch).release();
-    }
   };
 
   Cluster():
-    version(INITIAL_CLUSTER_VERSION) {}
+    version(INITIAL_CLUSTER_VERSION),
+    cluster_names(nullptr) {}
 
   // Simply add the instance without establishing the connection
   ClusterErrorCode add_instance(const std::string &name, 
                                 const NetworkAddress &addr) {
+    std::lock_guard<std::mutex> lock(mutex);
+
     if (!verify_network_address(addr)) {
       return S_ADDR_INVALID;
     }
     if (cluster_map.find(name) != cluster_map.end()) {
       return S_EXISTS;
     }
-    cluster_map.emplace(name, ServiceInstance(name, addr));
+    cluster_map.emplace(name, std::make_shared<ServiceInstance>(name, addr));
+    updated_cluster_names();
+    ++version;
     return S_SUCCESS;
   }
 
   ClusterErrorCode remove_instance(const std::string &name) {
+    std::lock_guard<std::mutex> lock(mutex);
+
     if (cluster_map.find(name) == cluster_map.end()) {
       return S_NOT_FOUND;
     }
     cluster_map.erase(name);
+    updated_cluster_names();
+    ++version;
     return S_SUCCESS;
   }
 
-  ServiceInstance * get_instance(const std::string &name) {
-    auto p = cluster_map.find(name);
-    assert(p != cluster_map.end());
-    return &p->second;
-  }
+  std::shared_ptr<ServiceInstance> get_instance(const std::string &name) {
+    std::lock_guard<std::mutex> lock(mutex);
 
-  void add_version_by_one() {
-    ++version;
+    auto p = cluster_map.find(name);
+    if (p == cluster_map.end()) {
+      return nullptr;
+    }
+    return p->second;
   }
 
   void set_version(uint64_t target) {
+    std::lock_guard<std::mutex> lock(mutex);
     assert(target > version);
     version = target;
   }
 
   uint64_t get_version() const {
+    std::lock_guard<std::mutex> lock(mutex);
     return version;
   }
 
   size_t size() const {
+    std::lock_guard<std::mutex> lock(mutex);
     return cluster_map.size();
   }
 
-  std::vector<std::string> get_cluster_names() const;
+  std::shared_ptr<std::vector<std::string>> get_cluster_names() const;
 
   std::vector<Info> get_cluster_infos() const;
 
@@ -129,8 +136,8 @@ class Cluster {
 
     std::vector<std::string> to_delete;
     for (auto p = cluster_map.cbegin(); p != cluster_map.cend(); ++p) {
-      if (new_cluster.find(p->second.name) == new_cluster.end()) {
-        to_delete.push_back(p->second.name);
+      if (new_cluster.find(p->second->name) == new_cluster.end()) {
+        to_delete.push_back(p->second->name);
       }
     }
 
@@ -138,35 +145,51 @@ class Cluster {
       cluster_map.erase(name);
     }
 
+    updated_cluster_names();
     version = ver;
   }
 
+  void lock() {
+    mutex.lock();
+  }
 
-  // TODO: it's probably better to provide a iterator? But it's public for now,
-  //       so that monitor service impl can broadcast cluster map without 
-  //       coding the rpc parameters inside this class.
-  std::unordered_map<std::string, ServiceInstance> cluster_map;
+  void unlock() {
+    mutex.unlock();
+  }
 
  private:
+  void updated_cluster_names() {
+    std::shared_ptr<std::vector<std::string>> result = 
+      std::make_shared<std::vector<std::string>>();
+
+    for (auto p = cluster_map.cbegin(); p != cluster_map.cend(); ++p) {
+      result->push_back(p->second->name);
+    }
+    cluster_names = result;
+  }
+
+
+  mutable std::mutex mutex;
+
   uint64_t version;
+
+  std::shared_ptr<std::vector<std::string>> cluster_names;
+
+  std::unordered_map<std::string, std::shared_ptr<ServiceInstance>> cluster_map;
 };
 
 template <typename Service>
-std::vector<std::string> Cluster<Service>::get_cluster_names() const {
-  std::vector<std::string> result;
-  for (auto p = cluster_map.cbegin(); p != cluster_map.cend(); ++p) {
-    result.push_back(p->second.name);
-  }
-  return result;
+std::shared_ptr<std::vector<std::string>> Cluster<Service>::get_cluster_names() const {
+  std::lock_guard<std::mutex> lock(mutex);
+  return cluster_names;
 }
 
-
-// TODO(optimization): kinda slow to generate a vector each time
 template <typename Service>
 std::vector<Info> Cluster<Service>::get_cluster_infos() const {
+  std::lock_guard<std::mutex> lock(mutex);
   std::vector<Info> result;
   for (auto p = cluster_map.cbegin(); p != cluster_map.cend(); ++p) {
-    result.emplace_back(p->first, p->second.addr);
+    result.emplace_back(p->first, p->second->addr);
   }
   return result;
 }

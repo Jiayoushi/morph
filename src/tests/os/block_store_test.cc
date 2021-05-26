@@ -18,7 +18,7 @@ using morph::os::Buffer;
 using morph::os::BlockStore;
 using morph::os::BlockAllocator;
 using morph::os::BufferManager;
-using morph::lbn_t;
+using morph::os::lbn_t;
 using morph::get_garbage;
 using morph::BlockStoreOptions;
 using morph::BlockAllocatorOptions;

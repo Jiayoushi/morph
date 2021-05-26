@@ -4,8 +4,11 @@
 
 #include "monitor/monitor.h"
 #include "os/oss.h"
+#include "mds/mds.h"
 #include "monitor/config.h"
 #include "common/consistent_hash.h"
+#include "cluster.h"
+#include "tests/utils.h"
 
 namespace morph {
 namespace test {
@@ -20,7 +23,7 @@ using ObjectStoreServer = os::ObjectStoreServer;
 
 TEST(Monitor, ConnectToMonitor) {
   NetworkAddress monitor_addr("0.0.0.0:5000");
-  monitor::Monitor monitor("monitor", monitor_addr);
+  monitor::Monitor monitor("mon0", monitor_addr);
 
   auto ch = CreateChannel(monitor_addr, grpc::InsecureChannelCredentials());
   std::unique_ptr<MonitorStub> stub = monitor_rpc::MonitorService::NewStub(ch);
@@ -49,6 +52,7 @@ TEST(Monitor, ConnectToMonitor) {
     set.insert(oss_addr);
     oss_servers.push_back(oss);
     get_oss_cluster_request.set_version(i);
+    get_oss_cluster_request.set_requester("oss" + std::to_string(i));
 
     s = stub->get_oss_cluster(&ctx, get_oss_cluster_request, 
                               &get_oss_cluster_reply);
@@ -76,17 +80,22 @@ TEST(Monitor, ConnectToMonitor) {
     ASSERT_EQ(get_oss_cluster_reply.info_size(), set.size());
     ASSERT_TRUE(equal_set(&get_oss_cluster_reply.info(), set));
   }
+
+  for (int i = 0; i <= 10; ++i) {
+    delete_directory("oss" + std::to_string(i));
+  }
+  delete_directory("mon0");
 }
 
 TEST(Oss, Replication) {
   NetworkAddress monitor_addr("0.0.0.0:5000");
-  monitor::Monitor monitor("monitor", monitor_addr);
+  monitor::Monitor monitor("mon0", monitor_addr);
 
   auto ch = CreateChannel(monitor_addr, grpc::InsecureChannelCredentials());
   std::unique_ptr<MonitorStub> stub = monitor_rpc::MonitorService::NewStub(ch);
 
   monitor::Config monitor_config;
-  monitor_config.infos.emplace_back("monitor", monitor_addr);
+  monitor_config.infos.emplace_back("mon0", monitor_addr);
   std::vector<ObjectStoreServer *> storage_servers;
   std::vector<std::shared_ptr<OssStub>> storage_stubs;
   std::vector<std::string> storage_names;
@@ -149,6 +158,84 @@ TEST(Oss, Replication) {
 
       ASSERT_EQ(body, rep.body());
     }
+  }
+
+  for (int i = 0; i < 5; ++i) {
+    delete_directory("oss" + std::to_string(i));
+  }
+  delete_directory("mon0");
+}
+
+TEST(Mds, Replication) {
+  using namespace mds;
+  using namespace mds_rpc;
+  using MdsStub = mds_rpc::MetadataService::Stub;
+
+  const int TOTAL_CREATE = 100;
+
+  Cluster cluster(1, 5);
+
+  std::shared_ptr<MdsStub> mds_stub = cluster.mds_stub;
+
+  std::string path;
+  path.reserve(TOTAL_CREATE * 2);
+
+  for (uint32_t i = 0; i < TOTAL_CREATE; ++i) {
+    path.append("/x");
+
+    {
+      grpc::ClientContext ctx;
+      mds_rpc::MkdirRequest request;
+      mds_rpc::MkdirReply reply;
+
+      request.set_uid(i);
+      request.set_pathname(path.c_str());
+      request.set_mode(666);
+    
+      ASSERT_TRUE(mds_stub->mkdir(&ctx, request, &reply).ok());
+      ASSERT_EQ(reply.ret_val(), 0);
+    }
+
+    {
+      grpc::ClientContext ctx;
+      mds_rpc::StatRequest request;
+      mds_rpc::StatReply reply;
+
+      request.set_uid(i);
+      request.set_pathname(path.c_str());
+
+      ASSERT_TRUE(mds_stub->stat(&ctx, request, &reply).ok());
+      ASSERT_EQ(reply.ret_val(), 0);
+      ASSERT_EQ(reply.stat().ino(), i + 2);
+      ASSERT_EQ(reply.stat().mode(), 666);
+      ASSERT_EQ(reply.stat().uid(), i);
+    }
+  }
+
+  cluster.restart_mds();
+  mds_stub = cluster.mds_stub;
+  path.clear();
+  std::this_thread::sleep_for(std::chrono::seconds(5));
+  for (uint32_t i = 0; i < TOTAL_CREATE; ++i) {
+    path.append("/x");
+
+    grpc::ClientContext ctx;
+    mds_rpc::StatRequest request;
+    mds_rpc::StatReply reply;
+
+    request.set_uid(i);
+    request.set_pathname(path.c_str());
+
+    auto p = mds_stub->stat(&ctx, request, &reply);
+    if (!p.ok()) {
+      std::cerr << p.error_message() << std::endl;
+    }
+
+    ASSERT_TRUE(p.ok());
+    ASSERT_EQ(reply.ret_val(), 0);
+    ASSERT_EQ(reply.stat().ino(), i + 2);
+    ASSERT_EQ(reply.stat().mode(), 666);
+    ASSERT_EQ(reply.stat().uid(), i);
   }
 }
 

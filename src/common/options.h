@@ -21,9 +21,6 @@ const uint8_t JOURNAL_TRANSACTION_SYNC_INTERVAL  = 1;
 
 
 // TODO: should this be renmaed to config?
-// TODO: recovery should happen automaticlaly when the "name" directory exists
-//       instead of using a boolean.
-
 struct BlockAllocatorOptions {
   // Should not be greater than the TOTLA_BLOCKS
   // specified in the BlockStoreOptions

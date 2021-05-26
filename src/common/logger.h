@@ -6,6 +6,7 @@
 #include <spdlog/fmt/bundled/printf.h>
 
 #include "common/filename.h"
+#include "common/env.h"
 
 namespace morph {
 
@@ -14,6 +15,11 @@ const enum spdlog::level::level_enum FLUSH_LEVEL = spdlog::level::level_enum::de
 
 inline std::shared_ptr<spdlog::logger> init_logger(const std::string &name) {
   std::shared_ptr<spdlog::logger> logger;
+
+  if (!file_exists(name.c_str())) {
+    assert(create_directory(name.c_str()).is_ok());
+  }
+
   try {
     logger = spdlog::get(name);
     if (logger == nullptr) {

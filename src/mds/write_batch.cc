@@ -19,9 +19,10 @@
 #include "write_batch.h"
 
 #include "log_format.h"
+#include "write_batch_internal.h"
 #include "common/coding.h"
 #include "common/utils.h"
-#include "write_batch_internal.h"
+#include "common/types.h"
 
 namespace morph {
 
@@ -129,25 +130,33 @@ size_t WriteBatch::approximate_size() const {
   return rep.size();
 }
 
-namespace {
-class OssSyncer: public WriteBatch::Handler {
- public:
-  void put(const Slice &key, const Slice &value) override {
 
+namespace {
+
+class OpVectorInserter : public WriteBatch::Handler {
+ public:
+  SequenceNumber sequence;
+  OpVector *op;
+
+  void put(const Slice& key, const Slice& value) override {
+    op->emplace_back(0, key, value);
+    sequence++;
   }
 
-  void del(const Slice &key) override {
-
+  void del(const Slice& key) override {
+    op->emplace_back(1, key, Slice());
+    sequence++;
   }
 };
-
 } // namespace
 
-//Status WriteBatchInternal::sync_batch_to_oss(const WriteBatch *b, ) {
-//  OssSyncer syncer;
-//
-//}
+Status WriteBatchInternal::insert_into(const WriteBatch* batch, OpVector *op) {
+  OpVectorInserter inserter;
+  inserter.sequence = WriteBatchInternal::sequence(batch);
+  inserter.op = op;
+  return batch->iterate(&inserter);
+}
+
 
 } // namespace mds
-
 } // namespace morph

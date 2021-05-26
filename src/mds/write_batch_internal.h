@@ -9,6 +9,7 @@
 
 #include "log_format.h"
 #include "write_batch.h"
+#include "common/types.h"
 
 namespace morph {
 
@@ -38,6 +39,8 @@ class WriteBatchInternal {
   }
 
   static void set_contents(WriteBatch *batch, const Slice &contents);
+
+  static Status insert_into(const WriteBatch* batch, OpVector *op);
 
   static void append(WriteBatch *dst, const WriteBatch *src);
 };

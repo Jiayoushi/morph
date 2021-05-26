@@ -34,7 +34,9 @@ class ObjectStore {
                  const uint32_t offset, const uint32_t size);
 
   int put_metadata(const std::string &object_name, 
-                   const std::string &attribute, const std::string &value);
+                   const std::string &attribute, 
+                   const bool create_object,
+                   const std::string &value);
 
   int get_metadata(const std::string &object_name,
                    const std::string &attribute, std::string *buf);

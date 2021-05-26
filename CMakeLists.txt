@@ -71,6 +71,7 @@ add_executable(object_store_test
 add_executable(third_party_test
   src/tests/third_party.cc)
 add_executable(integration_test
+  ${MDS_SRC_FILES}
   ${OS_SRC_FILES}
   ${COMMON_SRC_FILES}
   ${MONITOR_SRC_FILES}

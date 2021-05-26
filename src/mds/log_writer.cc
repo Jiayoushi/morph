@@ -19,7 +19,7 @@ namespace log {
 static void InitTypeCrc(uint32_t *type_crc) {
   for (int i = 0; i <= MAX_RECORD_TYPE; ++i) {
     char t = static_cast<char>(i);
-    type_crc[i] = crc32c::crc32_fast(&t, 1);
+    type_crc[i] = ~crc32c::crc32_fast(&t, 1);
   }
 }
 
@@ -98,7 +98,11 @@ Status Writer::emit_physical_record(RecordType type, const char *ptr, size_t len
     s = dest->append(Slice(ptr, length));
     if (s.is_ok()) {
       s = dest->flush();
+    } else {
+      assert(false);
     }
+  } else {
+    assert(false);
   }
 
   block_offset += HEADER_SIZE + length;

@@ -7,6 +7,7 @@
 #include <common/utils.h>
 #include <mutex>
 #include <condition_variable>
+#include <queue>
 
 #include "config.h"
 #include "log_reader.h"
@@ -14,6 +15,8 @@
 #include "write_batch.h"
 #include "write_batch_internal.h"
 #include "common/filename.h"
+#include "common/logger.h"
+#include "inode_file.h"
 
 namespace morph {
 
@@ -34,104 +37,87 @@ struct Namespace::Writer {
   std::condition_variable cv;
 };
 
-Namespace::Namespace(const std::string &name):
-  name(name),
-  root(nullptr),
-  next_inode_number(FIRST_INODE_NUMBER),
-  logged_batch_size(0), logfile_number(FIRST_LOG_FILE_NUMBER), 
-  sequence_number(0), log(nullptr), logfile(nullptr), tmp_batch(nullptr) {}
+Namespace::Namespace(const std::string &name, const bool need_recover):
+    this_name(name),
+    root(nullptr),
+    next_inode_number(FIRST_INODE_NUMBER),
+    logged_batch_size(0), logfile_number(FIRST_LOG_FILE_NUMBER), 
+    sequence_number(0), log_writer(nullptr), logfile(nullptr), tmp_batch(nullptr) {
+  logger = init_logger(name);
+  assert(logger != nullptr);
 
-Status Namespace::open(std::shared_ptr<spdlog::logger> logger) {
+  if (!need_recover) {
+    init_wal();
+    root = new InodeDirectory(INODE_TYPE::DIRECTORY, 
+                              get_next_inode_number(), 0, 0);
+    insert_inode_to_map(root);
+    WriteBatch batch;
+    batch.put(Slice(std::to_string(FIRST_INODE_NUMBER)), 
+              Slice(root->serialize()));
+    assert(write_to_log(true, &batch).is_ok());
+  }
+}
+
+void Namespace::init_wal() {
   Status s;
-
-  // Try to recover if directory exists
-  if (file_exists(name.c_str())) {
-    s = recover();
-    if (!s.is_ok()) {
-      return s;
-    }
-  } else {
-    s = create_directory(name.c_str());
-    if (!s.is_ok()) {
-      return s;
-    }
-    root = allocate_inode<InodeDirectory>(INODE_TYPE::DIRECTORY, 0, 0);
-  }
-
   WritableFile *lfile;
-  s = new_writable_file(log_file_name(name.c_str(), logfile_number), &lfile);
-  if (s.is_ok()) {
-    logfile = lfile;
-    log = new log::Writer(logfile);
-  }
+
+  s = new_writable_file(log_file_name(this_name.c_str(), logfile_number), 
+                        &lfile);
+  assert(s.is_ok());
+  logfile = lfile;
+  log_writer = new log::Writer(logfile);
 
   tmp_batch = new WriteBatch();
-  logger = logger;
-
-  return s;
-}
-
-// If there is any log file, recover from that, otherwise set log number to
-// a initial value.
-Status Namespace::recover() {
-  std::vector<std::string> names;
-  Status s;
-  
-  s = get_children("mds", &names);
-  if (!s.is_ok()) {
-    return s;
-  }
-
-  sort(names.begin(), names.end());
-
-  // Sync the logs to remote ods.
-  for (const auto &name: names) {
-    s = sync_log_to_oss(name);
-    if (!s.is_ok()) {
-      return s;
-    }
-  }
-
-  // TODO: Read all metadata from remote ods.
-
-  return s;
-}
-
-Status Namespace::sync_log_to_oss(const std::string &name) {
-  SequentialFile *file;
-  Status s = new_sequential_file(name, &file);
-  if (!s.is_ok()) {
-    return s;
-  }
-
-  // Read all the records and apply to oss.
-  log::Reader reader(file, true);
-  std::string scratch;
-  Slice record;
-  WriteBatch batch;
-  while (reader.read_record(&record, &scratch)) {
-    if (record.size() < 12) {
-      fprintf(stderr, "log record too small");
-      assert(false);
-    }
-    WriteBatchInternal::set_contents(&batch, record);
-  }
-
-  // TOOD: Delete this log file
-
-  return s;
 }
 
 Namespace::~Namespace() {
   delete tmp_batch;
   delete logfile;
-  delete log;
+  delete log_writer;
 
   while (!inode_map.empty()) {
     auto iter = inode_map.begin();
     delete iter->second;
     inode_map.erase(iter);
   }
+}
+
+void Namespace::recover(
+                std::function<std::string(const std::string &name)> get_inode_from_oss) {
+  using namespace clmdep_msgpack;
+
+  std::queue<ino_t> q;
+  std::queue<type_t> types;
+  q.push(FIRST_INODE_NUMBER);
+  types.push(INODE_TYPE::DIRECTORY);
+  
+  while (!q.empty()) {
+    ino_t ino = q.front();
+    std::string val = get_inode_from_oss(std::to_string(ino));
+    type_t type = types.front();
+
+    if (type == INODE_TYPE::DIRECTORY) {
+      InodeDirectory *dir = new InodeDirectory();
+      dir->deserialize(val);
+      assert(dir->ino == ino);
+      insert_inode_to_map(dir);
+
+      for (size_t i = 0; i < dir->size(); ++i) {
+        Dentry *d = dir->get_child(i);
+        q.push(d->ino);
+        types.push(d->type);
+      }
+    } else {
+      assert(false && "NOT YET IMPLEMENTED");
+    }
+
+    q.pop();
+    types.pop();
+  }
+
+  root = static_cast<InodeDirectory *>(get_inode(FIRST_INODE_NUMBER));
+  init_wal();
 }
 
 int Namespace::mkdir(uid_t uid, const char *pathname, mode_t mode) {
@@ -150,18 +136,21 @@ int Namespace::mkdir(uid_t uid, const char *pathname, mode_t mode) {
     return EEXIST;
   }
 
-  new_dir = allocate_inode<InodeDirectory>(INODE_TYPE::DIRECTORY, mode, uid);
-  parent->add_child(components.back().c_str(), new_dir->ino);
+  new_dir = new InodeDirectory(INODE_TYPE::DIRECTORY, get_next_inode_number(),
+                               mode, uid);
+  insert_inode_to_map(new_dir);
+  parent->add_child(components.back().c_str(), new_dir->ino, 
+                    INODE_TYPE::DIRECTORY, nullptr);
   new_dir->links += 1;
   parent->links += 1;
 
-  std::string new_dir_data = new_dir->serialize();
-  std::string parent_data =  parent->serialize();
-
   WriteBatch batch;
-  batch.put(Slice(std::to_string(parent->ino)), Slice(new_dir_data));
-  batch.put(Slice(std::to_string(parent->ino)), Slice(parent_data));
+  batch.put(Slice(std::to_string(new_dir->ino)), Slice(new_dir->serialize()));
+  batch.put(Slice(std::to_string(parent->ino)), Slice(parent->serialize()));
   Status s = write_to_log(true, &batch);
+  if (!s.is_ok()) {
+    std::cerr << s.to_string() << std::endl;
+  }
   assert(s.is_ok());
 
   return 0;
@@ -174,7 +163,7 @@ int Namespace::stat(uid_t uid, const char *path, mds_rpc::FileStat *stat) {
   components = get_pathname_components(path);
   inode = lookup(components);
   if (inode == nullptr) {
-    return -1;
+    return ENOENT;
   }
 
   stat->set_ino(inode->ino);
@@ -238,7 +227,7 @@ int Namespace::rmdir(uid_t uid, const char *pathname) {
 }
 
 int Namespace::readdir(uid_t uid, const mds_rpc::DirRead *dir, 
-    mds_rpc::DirEntry *dirent) {
+                       mds_rpc::DirEntry *dirent) {
   std::vector<std::string> components;
   Inode *ip;
   InodeDirectory *dirp;
@@ -290,9 +279,11 @@ InodeDirectory * Namespace::get_parent_inode(
 }
 
 Inode * Namespace::pathwalk(const std::vector<std::string> &components, 
-    bool stop_at_parent) {
+                            bool stop_at_parent) {
   Inode *parent = root;
   Inode *next = nullptr;
+
+  assert(root != nullptr);
 
   for (size_t i = 0; i < components.size(); ++i) {
     if (stop_at_parent && i == components.size() - 1) {
@@ -319,7 +310,8 @@ Inode * Namespace::pathwalk(const std::vector<std::string> &components,
   return !components.empty() ? next : root;
 }
 
-std::vector<std::string> Namespace::get_pathname_components(const std::string &pathname) {
+std::vector<std::string> Namespace::get_pathname_components(
+                                       const std::string &pathname) {
   std::vector<std::string> res;
   std::stringstream ss(pathname);
   std::string token;
@@ -358,10 +350,10 @@ Status Namespace::write_to_log(bool sync, WriteBatch *updates) {
     return w.status;
   }
   
-  Status status = make_room_for_log_write();
+  Status status;// = make_room_for_log_write();
   uint64_t last_sequence = sequence_number;
   Writer *last_writer = &w;
-  if (status.is_ok()) {
+  if (true) { //status.is_ok()) {
     WriteBatch *write_batch = build_batch_group(&last_writer);
     WriteBatchInternal::set_sequence(write_batch, last_sequence + 1);
     last_sequence += WriteBatchInternal::count(write_batch);
@@ -370,7 +362,7 @@ Status Namespace::write_to_log(bool sync, WriteBatch *updates) {
     // during this phase since &w is currently responsible for logging
     // and protects against concurrent logger
     mutex.unlock();
-    status = log->add_record(WriteBatchInternal::contents(write_batch));
+    status = log_writer->add_record(WriteBatchInternal::contents(write_batch));
     bool sync_error = false;
     if (status.is_ok() && sync) {
       status = logfile->sync();
@@ -379,12 +371,14 @@ Status Namespace::write_to_log(bool sync, WriteBatch *updates) {
       }
       logged_batch_size += write_batch->approximate_size();
     }
+
     mutex.lock();
     if (sync_error) {
       // The state of the log file is indeterminate: the log record we
       // just added may or may not show up when the DB is re-opened.
       // So we force the DB into a mode where all future writes fail.
       record_background_error(status);
+      assert(false);
     }
     if (write_batch == tmp_batch) {
       tmp_batch->clear();
@@ -417,19 +411,19 @@ Status Namespace::make_room_for_log_write() {
   assert(!writers.empty());
   Status s;
 
-  if (logged_batch_size > config::MAX_LOG_FILE_SIZE) {
+  if (logged_batch_size >= config::MAX_LOG_FILE_SIZE) {
     uint64_t new_log_number = logfile_number + 1;
     WritableFile *lfile;
-    s = new_writable_file(log_file_name("mds", new_log_number), &lfile);
+    s = new_writable_file(log_file_name(this_name, new_log_number), &lfile);
     if (!s.is_ok()) {
       return s;
     }
  
     delete logfile;
-    delete log;
+    delete log_writer;
     logfile = lfile;
     logfile_number = new_log_number;
-    log = new log::Writer(lfile);
+    log_writer = new log::Writer(lfile);
     logged_batch_size = 0;
   }
 

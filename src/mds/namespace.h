@@ -25,9 +25,7 @@ namespace mds {
 // TODO: don't use the shared_ptr for inode
 class Namespace: NoCopy {
  public:
-  Namespace(const std::string &name);
-
-  Status open(std::shared_ptr<spdlog::logger> logger);
+  Namespace(const std::string &name, const bool recover);
 
   ~Namespace();
 
@@ -44,6 +42,8 @@ class Namespace: NoCopy {
 
   int rmdir(uid_t, const char *pathname);
 
+  void recover(std::function<std::string(const std::string &name)> func);
+
  private:
   std::vector<std::string> get_pathname_components(
     const std::string &pathname);
@@ -56,16 +56,19 @@ class Namespace: NoCopy {
   Inode * pathwalk(const std::vector<std::string> &components, 
     bool stop_at_parent = false);
 
-  template <typename InodeType>
-  InodeType * allocate_inode(type_t type, mode_t mode, 
-    uid_t uid);
-
   Inode * get_inode(InodeNumber ino);
 
   void remove_inode(InodeNumber ino);
 
-  
+  InodeNumber get_next_inode_number() {
+    return next_inode_number++;
+  }
 
+  void insert_inode_to_map(Inode *inode) {
+    inode_map.insert(std::pair<InodeNumber, Inode *>(inode->ino, inode));
+  }
+
+  
   struct Writer;
 
   Status write_to_log(bool sync, WriteBatch *batch);
@@ -76,13 +79,10 @@ class Namespace: NoCopy {
 
   WriteBatch * build_batch_group(Writer **last_writer);
 
-  Status recover();
-
-  Status sync_log_to_oss(const std::string &file);
+  void init_wal();
 
 
-
-  const std::string name;
+  const std::string this_name;
 
   std::shared_ptr<spdlog::logger> logger;
 
@@ -95,7 +95,7 @@ class Namespace: NoCopy {
   uint64_t logfile_number;
   uint64_t sequence_number;
   size_t logged_batch_size;
-  log::Writer *log;
+  log::Writer *log_writer;
   WritableFile *logfile;
   std::condition_variable background_work_finished_signal;
 
@@ -104,15 +104,6 @@ class Namespace: NoCopy {
 
   Status bg_error;
 };
-
-template <typename InodeType>
-InodeType * Namespace::allocate_inode(type_t type, mode_t mode, 
-    uid_t uid) {
-  InodeNumber ino = next_inode_number++;
-  InodeType *inode = new InodeType(type, ino, mode, uid);
-  inode_map.insert(std::pair<InodeNumber, InodeType *>(ino, inode));
-  return inode;
-}
 
 } // namespace mds
 

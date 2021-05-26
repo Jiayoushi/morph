@@ -561,12 +561,17 @@ void ObjectStore::after_read(IoRequest *request, bool finished) {
 }
 
 int ObjectStore::put_metadata(const std::string &object_name, 
-                              const std::string &attribute, 
+                              const std::string &attribute,
+                              const bool create_object,
                               const std::string &value) {
   rocksdb::Status status;
 
   if (search_object(object_name, false) == nullptr) {
-    return os::OBJECT_NOT_FOUND;
+    if (create_object) {
+      put_object(object_name, 0, "");
+    } else {
+      return os::OBJECT_NOT_FOUND;
+    }
   }
 
   status = kv_store.put(CF_INDEX::CF_OBJ_META,
