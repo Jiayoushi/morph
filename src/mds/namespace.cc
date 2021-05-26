@@ -350,10 +350,10 @@ Status Namespace::write_to_log(bool sync, WriteBatch *updates) {
     return w.status;
   }
   
-  Status status;// = make_room_for_log_write();
+  Status status = make_room_for_log_write();
   uint64_t last_sequence = sequence_number;
   Writer *last_writer = &w;
-  if (true) { //status.is_ok()) {
+  if (status.is_ok()) {
     WriteBatch *write_batch = build_batch_group(&last_writer);
     WriteBatchInternal::set_sequence(write_batch, last_sequence + 1);
     last_sequence += WriteBatchInternal::count(write_batch);
