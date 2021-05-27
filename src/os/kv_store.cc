@@ -34,8 +34,6 @@ KvStore::KvStore(const std::string &na,
 
   write_thread = std::make_unique<std::thread>(&KvStore::write_routine, this);
 
-  flush_thread = std::make_unique<std::thread>(&KvStore::flush_routine, this);
-
   close_thread = std::make_unique<std::thread>(&KvStore::close_routine, this);
 }
 
@@ -156,6 +154,12 @@ void KvStore::write_routine() {
       }
     }
  
+    s = db->FlushWAL(true);
+    if (!s.ok()) {
+      std::cerr << "Failed to flush wal " << s.ToString() << std::endl;
+      exit(EXIT_FAILURE);
+    }
+
     for (const auto &handle: transaction->handles) {
       if (handle->post_log_callback) {
         handle->post_log_callback();
@@ -163,20 +167,6 @@ void KvStore::write_routine() {
     }
     transaction->handles.clear();
     ++next_expected_txn;
-  }
-}
-
-void KvStore::flush_routine() {
-  rocksdb::Status s;
-
-  while (running) {
-    s = db->FlushWAL(true);
-    if (!s.ok()) {
-      std::cerr << "Failed to flush wal " << s.ToString() << std::endl;
-      exit(EXIT_FAILURE);
-    }
-
-    std::this_thread::sleep_for(std::chrono::seconds(1));
   }
 }
 
@@ -223,14 +213,6 @@ void KvStore::stop() {
 
   close_thread->join();
   write_thread->join();
-  flush_thread->join();
-
-  // Flush one last time in case flush thread exited before write_thread
-  rocksdb::Status s = db->FlushWAL(true);
-  if (!s.ok()) {
-    std::cerr << "Failed to flush wal " << s.ToString() << std::endl;
-    exit(EXIT_FAILURE);
-  }
 
   assert(closed_txns.empty());
   assert(written_txns == 0);

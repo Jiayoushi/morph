@@ -84,8 +84,6 @@ class KvStore {
 
   void init_db(const bool recovery);
 
-  void flush_routine();
-
   void write_routine();
 
   void close_routine();
@@ -116,8 +114,6 @@ class KvStore {
   rocksdb::DB *db;
 
   std::atomic<bool> running;
-
-  std::unique_ptr<std::thread> flush_thread;
 
   std::unique_ptr<std::thread> write_thread;
 
