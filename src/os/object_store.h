@@ -105,15 +105,14 @@ class ObjectStore {
   void persist_metadata();
 
   // Called by the kv_store after a write call is journaled
-  void post_log(IoRequest *request) {
+  void submit_request(IoRequest *request) {
     for (Buffer *buffer: request->buffers) {
       buffer->mutex.lock();
     }
     block_store.submit_request(request);
   }
 
-  void after_write(const std::shared_ptr<Object> &object, 
-                   IoRequest *request, bool finished);
+  void after_write(IoRequest *request, bool finished);
 
   void after_read(IoRequest *request, bool finished);
 
@@ -123,17 +122,32 @@ class ObjectStore {
   // Read the metadata and replay the data log after restart or crash
   void recover();
 
+  void replay_data_logs();
+
   uint64_t assign_request_id() {
     return request_id++;
   }
 
-  // 0000000....00145-object_sara-138
-  std::string get_data_key(uint32_t transaction_id, 
-                           const std::string &object_name, 
-                           uint32_t offset) {
+  // 0000000....00145-5
+  // 145 is the transaction id
+  // 5 is the logical block number
+  std::string get_data_key(uint32_t transaction_id, lbn_t lbn) {
     char buf[512];
-    sprintf(buf, "%032d-%s-%u", transaction_id, object_name.c_str(), offset);
+    sprintf(buf, "%032d-%u", transaction_id, lbn);
     return std::string(buf);
+  }
+
+  void parse_data_key(const std::string &key, uint32_t *txn_id, lbn_t *lbn) {
+    size_t splitter = key.find("-");
+    assert(splitter != std::string::npos);
+
+    std::stringstream ss1(key.substr(0, splitter));
+    assert(ss1);
+    ss1 >> *txn_id;
+
+    std::stringstream ss2(key.substr(splitter, key.size() - splitter + 1));
+    assert(ss2);
+    ss2 >> *lbn;
   }
 
   std::string get_object_metadata_key(const std::string &object_name,

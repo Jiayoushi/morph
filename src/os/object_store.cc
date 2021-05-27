@@ -63,6 +63,7 @@ void ObjectStore::recover() {
   }
   delete bitmap_iter;
 
+
   // Restore object metadata
   auto obj_meta_iter = kv_store.db->NewIterator(
                              ReadOptions(), 
@@ -82,8 +83,55 @@ void ObjectStore::recover() {
     deserialize(obj_meta_iter->value().ToString(), *object);
   }
   delete obj_meta_iter;
+}
 
-  // TODO: Replay the write calls
+void ObjectStore::replay_data_logs() {
+  using rocksdb::ReadOptions;
+  using rocksdb::Status;
+  using rocksdb::Slice;
+
+  // The request type is set to small write so it can be deleted afterwards
+  IoRequest *request = nullptr;
+ 
+  uint32_t prev_txn_id = 0;
+  auto data_iter = kv_store.db->NewIterator(
+                                ReadOptions(),
+                                kv_store.get_cf_handle(CF_INDEX::CF_OBJ_DATA));
+  for (data_iter->SeekToFirst();
+       data_iter->Valid();
+       data_iter->Next()) {
+    std::string key = data_iter->key().ToString();    
+    std::string value = data_iter->value().ToString();
+    uint32_t txn_id;
+    lbn_t lbn;
+
+    // TODO: limit the number of buffers under the max events block store can handle.
+    //       This should be handled by block store. Need to be refactored later.
+    if (request && request->buffers.size() > 20) {
+      submit_request(request);
+
+      // TODO: this is only necessary for the last one
+      //       or you can just use a sync call to the block store.
+      //       Either way, change this later.
+      request->wait_for_complete();
+      request = nullptr;
+    }
+
+    if (request == nullptr) {
+      request = allocate_request(OP_SMALL_WRITE);
+      request->after_complete_callback = [request, this]() {
+        after_write(request, false);
+      };
+    }
+
+    parse_data_key(key, &txn_id, &lbn);
+    assert(txn_id);
+
+    Buffer *buffer = buffer_manager.get_buffer(lbn);
+    request->buffers.push_back(buffer);
+  }
+
+  delete data_iter;
 }
 
 std::shared_ptr<Object> ObjectStore::allocate_object(const std::string &name) {
@@ -243,7 +291,7 @@ void ObjectStore::object_large_write(std::shared_ptr<Object> object,
 
   request->after_complete_callback = 
       [this, object, request, handle]() mutable {
-    this->after_write(object, request, false);
+    this->after_write(request, false);
     kv_store.end_transaction(handle);
   };
 
@@ -270,7 +318,7 @@ void ObjectStore::object_small_write(std::shared_ptr<Object> object,
 
   log_handle = kv_store.start_transaction();
 
-  log_handle->post_log_callback = std::bind(&ObjectStore::post_log, this, 
+  log_handle->post_log_callback = std::bind(&ObjectStore::submit_request, this, 
                                             request);
 
   request->after_complete_callback = 
@@ -278,7 +326,7 @@ void ObjectStore::object_small_write(std::shared_ptr<Object> object,
       if (on_apply) {
         on_apply();
       }
-      after_write(object, request, true);
+      after_write(request, true);
     };
 
   for (lbn_t lbn = lbn_start; 
@@ -300,6 +348,9 @@ void ObjectStore::object_small_write(std::shared_ptr<Object> object,
     }
 
     write_buffer(object, buffer, data_ptr, buf_off, write_len);
+    log_handle->put(CF_INDEX::CF_OBJ_DATA,
+                    get_data_key(log_handle->transaction->id, lbn),
+                    std::move(std::string(data_ptr, write_len)));
 
     request->buffers.push_back(buffer);
   }
@@ -313,11 +364,6 @@ void ObjectStore::object_small_write(std::shared_ptr<Object> object,
                     object_name, 
                     std::move(v));
   }
-
-  log_handle->put(CF_INDEX::CF_OBJ_DATA,
-                  get_data_key(log_handle->transaction->id, 
-                               object_name, offset), 
-                  std::move(data));
 
   kv_store.end_transaction(log_handle);
 }
@@ -533,11 +579,12 @@ void ObjectStore::stop() {
   block_store.stop();
 }
 
-void ObjectStore::after_write(const std::shared_ptr<Object> &object, 
-                              IoRequest *request, bool finished) {
+void ObjectStore::after_write(IoRequest *request, bool finished) {
   for (Buffer *buffer: request->buffers) {
     flag_unmark(buffer, B_DIRTY);
     buffer_manager.put_buffer(buffer);
+
+    // It's locked when calling block_store.submit_request
     buffer->mutex.unlock();
   }
 

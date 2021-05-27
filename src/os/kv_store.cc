@@ -186,6 +186,8 @@ void KvStore::close_routine() {
 
     std::lock_guard<std::mutex> lock(mutex);
 
+    rocksdb::WriteBatch batch;
+
     if (open_txn == nullptr) {
       continue;
     }

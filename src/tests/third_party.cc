@@ -119,7 +119,6 @@ TEST(RocksdbTest, Basic) {
   delete db;
 
 
-
   // Check recovery
   std::vector<ColumnFamilyDescriptor> column_families;
 
