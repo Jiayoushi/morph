@@ -4,14 +4,14 @@ package monitor_rpc;
 
 service MonitorService {
   rpc add_oss(AddOssRequest) returns (AddOssReply) {};
-  rpc add_mds(AddMdsRequest) returns (AddMdsReply) {};
-
+  rpc remove_oss(RemoveOssRequest) returns (RemoveOssReply) {};
   rpc get_oss_cluster(GetOssClusterRequest) returns (GetOssClusterReply) {};
 
-  rpc remove_oss(RemoveOssRequest) returns (RemoveOssReply) {};
+  rpc add_mds(AddMdsRequest) returns (AddMdsReply) {};
 
   rpc prepare (PrepareRequest) returns (PrepareReply) {};
   rpc accept (AcceptRequest) returns (AcceptReply) {};
+  rpc commit (CommitRequest) returns (CommitReply) {};
   rpc heartbeat (HeartbeatRequest) returns (HeartbeatReply) {};
 }
 
@@ -65,21 +65,34 @@ message RemoveOssReply {
 message PrepareRequest {
   uint32 log_index = 1;
   uint64 proposal = 2;
+  string proposer = 3;
 }
 
 message PrepareReply {
-  uint64 accepted_proposal = 1;
-  bytes accepted_value = 2;
+  uint32 ret_val = 1;
+  uint64 accepted_proposal = 2;
+  bytes accepted_value = 3;
 }
 
 message AcceptRequest {
   uint32 log_index = 1;
   uint64 proposal = 2;
-  bytes value = 3;
+  string proposer = 3;
+  bytes value = 4;
 }
 
 message AcceptReply {
-  uint64 min_proposal = 1;
+  uint32 ret_val = 1;
+  uint64 min_proposal = 2;
+}
+
+message CommitRequest {
+  uint32 log_index = 1;
+  uint64 proposal = 2;
+}
+
+message CommitReply {
+
 }
 
 message HeartbeatRequest {

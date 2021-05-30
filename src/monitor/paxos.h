@@ -97,7 +97,10 @@ class Paxos {
                       const uint64_t proposal, const std::string &value,
                       uint64_t *min_proposal);
 
+  void commit_handler(const uint32_t log_index,
+                       const uint64_t proposal);
 
+  void get_last_chosen_log(uint32_t *log_index, std::string *value);
 
   MSGPACK_DEFINE_ARRAY(logs);
 

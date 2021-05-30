@@ -12,7 +12,6 @@ MonitorServiceImpl::MonitorServiceImpl(const Config &config):
     this_name(config.this_info->name),
     this_addr(config.this_info->addr),
     oss_cluster_manager(),
-    broadcast_thread(nullptr),
     running(true)  {
 
   if (!file_exists(this_name.c_str())) {
@@ -30,15 +29,11 @@ MonitorServiceImpl::MonitorServiceImpl(const Config &config):
   }
 
   paxos_service = std::make_unique<paxos::PaxosService>(this_name, monitor_cluster);
-
-  broadcast_thread = std::make_unique<std::thread>(
-    &MonitorServiceImpl::broadcast_routine, this);
 }
 
 
 MonitorServiceImpl::~MonitorServiceImpl() {
   running = false;
-  broadcast_thread->join();
 }
 
 grpc::Status MonitorServiceImpl::get_oss_cluster(ServerContext *context, 
@@ -80,17 +75,21 @@ grpc::Status MonitorServiceImpl::add_oss(ServerContext *context,
   logger->info(fmt::sprintf("add_oss: name[%s] addr[%s]\n",
     info.name, info.addr));
 
-  ret_val = oss_cluster_manager.add_instance(info, &serialized);
+  if (!paxos_service->is_leader(this_name)) {
+    ret_val = S_NOT_LEADER;
+  } else {
+    ret_val = oss_cluster_manager.add_instance(info, &serialized);
   
-  // Use paxos to replicate the log and then answer to the client
-  if (ret_val == S_SUCCESS) {
-    uint64_t log_index;
+    // Use paxos to replicate the log and then answer to the client
+    if (ret_val == S_SUCCESS) {
+      uint64_t log_index;
+  
+      for (bool chosen = false; chosen == false; ) {
+        chosen = paxos_service->run(serialized, &log_index);
+      }
 
-    for (bool chosen = false; chosen == false; ) {
-      chosen = paxos_service->run(serialized, &log_index);
+      oss_cluster_manager.update(log_index + 1);
     }
-
-    oss_cluster_manager.update(log_index + 1);
   }
 
   logger->info(fmt::sprintf("add_oss: name[%s] addr[%s] returns[%d]\n",
@@ -103,7 +102,7 @@ grpc::Status MonitorServiceImpl::add_oss(ServerContext *context,
 grpc::Status MonitorServiceImpl::add_mds(ServerContext *context, 
                                          const AddMdsRequest *request,
                                          AddMdsReply *reply) {
-  int ret_val;
+  int ret_val = S_SUCCESS;
 
   assert(false && "NOT YET IMPLEMENTED");
 
@@ -116,10 +115,16 @@ grpc::Status MonitorServiceImpl::prepare(ServerContext *context,
                                        PrepareReply *reply)  {
   uint64_t accepted_proposal;
   std::string accepted_value;
+  int ret_val = S_SUCCESS;
 
-  paxos_service->prepare_handler(request->log_index(), request->proposal(), 
-                                 &accepted_proposal, &accepted_value);
+  if (paxos_service->is_leader(request->proposer())) {
+    paxos_service->prepare_handler(request->log_index(), request->proposal(), 
+                                   &accepted_proposal, &accepted_value);
+  } else {
+    ret_val = S_NOT_LEADER;
+  }
 
+  reply->set_ret_val(ret_val);
   reply->set_accepted_proposal(accepted_proposal);
   reply->set_accepted_value(accepted_value);
   return grpc::Status::OK;
@@ -129,11 +134,48 @@ grpc::Status MonitorServiceImpl::accept(ServerContext *context,
                                       const AcceptRequest* request,
                                       AcceptReply *reply) {
   uint64_t min_proposal;
+  int ret_val = S_SUCCESS;
 
-  paxos_service->accept_handler(request->log_index(), request->proposal(),
-                                request->value(), &min_proposal);
+  if (paxos_service->is_leader(request->proposer())) {
+    paxos_service->accept_handler(request->log_index(), request->proposal(),
+                                  request->value(), &min_proposal);
+  } else {
+    ret_val = S_NOT_LEADER;
+  }
   
+  reply->set_ret_val(ret_val);
   reply->set_min_proposal(min_proposal);
+  return grpc::Status::OK;
+}
+
+grpc::Status MonitorServiceImpl::commit(ServerContext *context,
+                                        const CommitRequest *request,
+                                        CommitReply *reply) {
+  uint32_t log_index;
+  std::string value;
+  uint64_t current_version;
+  uint64_t new_version;
+
+  logger->info(fmt::sprintf(
+    "commit request received: index[%d] proposal[%lu]\n",
+    request->log_index(), request->proposal()
+  ));
+
+  paxos_service->commit_handler(request->log_index(), request->proposal());
+
+  paxos_service->get_last_chosen_log(&log_index, &value);
+  oss_cluster_manager.get_current(&current_version, nullptr);
+  new_version = log_index + 1;
+
+  if (new_version > current_version) {
+    oss_cluster_manager.update_to(log_index + 1, value);
+  }
+
+  logger->info(fmt::sprintf(
+    "commit request received: index[%d] proposal[%lu]. Old version[%lu], New version[%lu]\n",
+    request->log_index(), request->proposal(), current_version, new_version
+  ));
+
   return grpc::Status::OK;
 }
 
@@ -142,7 +184,6 @@ grpc::Status MonitorServiceImpl::heartbeat(ServerContext *context,
                                          HeartbeatReply *reply) {
   return grpc::Status::OK;
 }
-
 
 grpc::Status MonitorServiceImpl::remove_oss(ServerContext *context, 
                                             const RemoveOssRequest *request, 
@@ -245,6 +286,8 @@ void MonitorServiceImpl::broadcast_new_oss_cluster() {
   }
 }
 
+// TODO: right now do not use this, let whoever wants to know the 
+//       latest cluster to query
 void MonitorServiceImpl::broadcast_routine() {
   while (running) {
     broadcast_new_oss_cluster();

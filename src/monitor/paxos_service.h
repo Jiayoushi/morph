@@ -41,14 +41,20 @@ class PaxosService {
   bool run(const std::string &value, uint64_t *log_index);
 
   void prepare_handler(const uint32_t log_index, const uint64_t proposal, 
-                       uint64_t *out_accepted_proposal, 
+                       uint64_t *out_accepted_proposal,
                        std::string *accepted_value);
 
   void accept_handler(const uint32_t log_index,
-                      const uint64_t proposal, const std::string &value,
+                      const uint64_t proposal, 
+                      const std::string &value,
                       uint64_t *min_proposal);
 
-  bool is_leader(std::shared_ptr<std::vector<std::string>> names);
+  void commit_handler(const uint32_t log_index,
+                      const uint64_t proposal);
+
+  bool is_leader(const std::string &name);
+
+  void get_last_chosen_log(uint32_t *log_index, std::string *value);
 
  private:
   std::unique_ptr<PvPair> broadcast_prepare(const uint32_t log_index, 
@@ -57,8 +63,14 @@ class PaxosService {
   bool broadcast_accept(const uint32_t log_index, const uint64_t proposal, 
                         const std::string &value);
 
+  void broadcast_commit(const uint32_t log_index,
+                        const uint64_t proposal);
+
   void broadcast_heartbeat_routine();
 
+  // Returns <accepted_proposal, accepted_value>
+  // Returns nullptr if the receiver does not think you are the leader
+  //                 or timeout before reciever returned anything
   std::unique_ptr<PvPair> send_prepare(
                              std::shared_ptr<MonitorInstance> instance, 
                              const uint32_t log_index,
@@ -66,12 +78,19 @@ class PaxosService {
                              std::atomic<int> *response_count,
                              const int target_count);
 
-  uint64_t send_accept(std::shared_ptr<MonitorInstance> instance, 
-                       const uint32_t log_index,
-                       const uint64_t proposal,
-                       const std::string &value,
-                       std::atomic<int> *response_count,
-                       const int target_count);
+  // Return min_proposal
+  // Returns nullptr if the receiver does not think you are the leader
+  //                 or timeout before reciever returned anything
+  std::unique_ptr<uint64_t> send_accept(std::shared_ptr<MonitorInstance> instance, 
+                                        const uint32_t log_index,
+                                        const uint64_t proposal,
+                                        const std::string &value,
+                                        std::atomic<int> *response_count,
+                                        const int target_count);
+
+  void send_commit(std::shared_ptr<MonitorInstance> instance, 
+                   const uint32_t log_index,
+                   const uint64_t proposal);
 
   const std::string this_name;
 

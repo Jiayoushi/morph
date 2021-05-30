@@ -62,16 +62,38 @@ void Paxos::accept_handler(const uint32_t log_index, const uint64_t proposal,
   *min_proposal = log.min_proposal;
 }
 
+void Paxos::commit_handler(const uint32_t log_index,
+                           const uint64_t proposal) {
+  Log &log = logs[log_index];
+  log.set_chosen();
+}
+
 uint64_t Paxos::choose_new_proposal_number(Log *log) {
   assert(log != nullptr);
   char buf[8];
   char *buf_ptr = buf;
+  uint64_t proposal;
 
-  ++log->max_round;
-  encode_fixed_32(buf_ptr, server_id);
-  encode_fixed_32(buf_ptr + 4, log->max_round);
+  do {
+    ++log->max_round;
+    encode_fixed_32(buf_ptr, server_id);
+    encode_fixed_32(buf_ptr + 4, log->max_round);
+    proposal = decode_fixed_64(buf);
+    assert(proposal != log->min_proposal);
+  } while (proposal < log->min_proposal);
 
-  return decode_fixed_64(buf);
+  return proposal;
+}
+
+void Paxos::get_last_chosen_log(uint32_t *log_index, std::string *value) {
+  for (uint32_t i = logs.size() - 1; i >= 0; --i) {
+    if (logs[i].state == VALUE_CHOSEN) {
+      *log_index = i;
+      *value = logs[i].accepted_value;
+      return;
+    }
+  }
+  assert(false);
 }
 
 } // namespace paxos

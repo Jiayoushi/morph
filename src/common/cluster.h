@@ -24,7 +24,9 @@ enum ClusterErrorCode {
   S_CONNECTION_FAILED = 4,
 
   // The format of server network address is not correct
-  S_ADDR_INVALID = 5
+  S_ADDR_INVALID = 5,
+
+  S_NOT_LEADER = 6
 };
 
 // No lock needed. The synchronization of cluster change is provided by 
@@ -121,6 +123,10 @@ class Cluster {
 
   void update_cluster(const std::string &s) {
     using namespace clmdep_msgpack;
+
+    if (s.empty()) {
+      return;
+    }
 
     std::vector<Info> infos;
     object_handle oh = unpack(s.data(), s.size());

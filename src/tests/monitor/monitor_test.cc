@@ -126,36 +126,22 @@ TEST(Monitor, BasicOperation) {
 class ClusterTester {
  public:
   ClusterTester(const int count):
+      config(count),
       next_oss_id(0) {
-    Config config(count);
     for (int i = 0; i < count; ++i) {
       config.add("mon" + std::to_string(i), 
                  "0.0.0.0:500" + std::to_string(i));
     }
 
-    servers.reserve(count);
-    stubs.reserve(count);
-
     for (int i = 0; i < count; ++i) {
       config.set_this(i);
-      servers.push_back(new Monitor(config));
-    }
-
-    for (int i = 0; i < count; ++i) {
-      auto ch = CreateChannel(config.this_info->addr, 
-                              grpc::InsecureChannelCredentials());
-      stubs.push_back(monitor_rpc::MonitorService::NewStub(ch));
-    }
-  }
-
-  ~ClusterTester() {
-    for (Monitor *mon: servers) {
-      delete mon;
+      instances.emplace(config.this_info->name, 
+                        std::make_shared<Instance>(config));
     }
   }
 
   void add_oss() {
-    auto leader = stubs.back();
+    auto leader = instances.rbegin()->second;
     grpc::ClientContext ctx;
     AddOssRequest request;
     AddOssReply reply;
@@ -166,25 +152,54 @@ class ClusterTester {
     const Info fo(info->name(), info->addr());
     oss_cluster.add_instance(fo);
 
-    auto s = leader->add_oss(&ctx, request, &reply);
+    auto s = leader->stub->add_oss(&ctx, request, &reply);
 
     assert(s.ok()); // TODO: ...
     assert(reply.ret_val() == 0);
   }
 
   bool consensus_reached() {
-    return check_consensus(servers.size());
+    return check_consensus(instances.size());
   }
 
   bool majority_consensus_reached() {
-    return check_consensus(1 + servers.size() / 2);
+    return check_consensus(1 + (instances.size() / 2));
+  }
+
+  void shutdown(const int index) {
+    std::string name = "mon" + std::to_string(index);
+    assert(instances.find(name) != instances.end());
+    instances[name]->mon = nullptr;
+  }
+
+  void restart(const int index) {
+    std::string name = "mon" + std::to_string(index);
+    assert(instances.find(name) != instances.end());
+    config.set_this(index);
+    instances[name]->mon = std::make_unique<Monitor>(config);
   }
 
  private:
-  bool check_consensus(const int count) {
+  struct Instance {
+    Info info;
+    std::unique_ptr<Monitor> mon;
+    std::shared_ptr<MonitorStub> stub;
+
+    Instance() = delete;
+    Instance(const Config &config):
+        info(*config.this_info) {
+      mon = std::make_unique<Monitor>(config);
+      auto ch = CreateChannel(info.addr,
+                              grpc::InsecureChannelCredentials());
+      stub = monitor_rpc::MonitorService::NewStub(ch);
+    }
+  };
+
+  bool check_consensus(const int target) {
     int reached = 0;
 
-    for (auto &stub: stubs) {
+    for (auto x = instances.begin(); x != instances.end(); ++x) {
+      auto stub = x->second->stub;
       GetOssClusterRequest get_oss_cluster_request;
       GetOssClusterReply get_oss_cluster_reply;
 
@@ -194,15 +209,17 @@ class ClusterTester {
 
       auto s = stub->get_oss_cluster(&ctx, get_oss_cluster_request, 
                                      &get_oss_cluster_reply);
-
-      assert(s.ok());
+      if (!s.ok()) {
+        continue;
+      }
       assert(get_oss_cluster_reply.ret_val() == S_SUCCESS);
       if (equal_set(get_oss_cluster_reply.cluster())) {
         reached += 1;
       }
     }
 
-    return reached == count;
+    //fprintf(stderr, "REACHED [%d] target [%d]\n", reached, target);
+    return reached >= target;
   }
 
   bool equal_set(const std::string &s) {
@@ -214,13 +231,14 @@ class ClusterTester {
   OssInfo * get_next_oss() {
     OssInfo *info = new OssInfo();
     info->set_name("oss" + std::to_string(next_oss_id));
-    info->set_addr("0.0.0.0:" + std::to_string(5000 + next_oss_id));
+    info->set_addr("0.0.0.0:" + std::to_string(6000 + next_oss_id));
     ++next_oss_id;
     return info;
   }
 
-  std::vector<Monitor *> servers;
-  std::vector<std::shared_ptr<MonitorStub>> stubs;
+  Config config;
+
+  std::map<std::string, std::shared_ptr<Instance>> instances;
 
   int next_oss_id;
   Cluster<oss_rpc::ObjectStoreService> oss_cluster;
@@ -230,12 +248,28 @@ TEST(Monitor, FaultTolerant) {
   ClusterTester tester(5);
  
   tester.add_oss();
-  std::this_thread::sleep_for(std::chrono::seconds(1));
-  ASSERT_TRUE(tester.consensus_reached());
+  ASSERT_TRUE(tester.majority_consensus_reached());
 
   tester.add_oss();
-  std::this_thread::sleep_for(std::chrono::seconds(1));
-  ASSERT_TRUE(tester.consensus_reached());
+  ASSERT_TRUE(tester.majority_consensus_reached());
+
+  tester.shutdown(0);
+  tester.shutdown(1);
+
+  tester.add_oss();
+  ASSERT_TRUE(tester.majority_consensus_reached());
+
+  tester.restart(0);
+  tester.add_oss();
+  ASSERT_TRUE(tester.majority_consensus_reached());
+
+  tester.restart(1);
+  tester.add_oss();
+  ASSERT_TRUE(tester.majority_consensus_reached());
+
+  //tester.shutdown(4);
+  //tester.add_oss();
+  //ASSERT_TRUE(tester.majority_consensus_reached());
 }
 
 /* TODO:
