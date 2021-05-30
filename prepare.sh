@@ -8,6 +8,8 @@ then
   mkdir $out
 fi
 
+
+# TODO: put all the names into a list and enumerate them
 # Generate proto files
 protoc src/tests/rpc/math.proto \
        -I src/tests/rpc         \

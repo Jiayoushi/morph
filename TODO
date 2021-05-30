@@ -3,3 +3,4 @@
    should use other methods. The compilation time is too slow.
 3. The transaction logic should not be placed at kv_store
 4. cleanup: need to delete mds and object store wal files when appropariate
+5. each service should have its own cmake

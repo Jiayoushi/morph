@@ -15,8 +15,6 @@ namespace os {
 
 class KvStore;
 
-
-
 // TODO: It's probably not the most suitable place to put this
 enum CF_INDEX {
   CF_SYS_DEFAULT = 0,

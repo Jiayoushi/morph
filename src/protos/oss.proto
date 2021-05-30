@@ -82,7 +82,7 @@ message OssInfo {
 
 message UpdateOssClusterRequest {
   uint64 version = 1;
-  repeated OssInfo info = 2;
+  bytes cluster = 2;
 }
 
 message UpdateOssClusterReply {

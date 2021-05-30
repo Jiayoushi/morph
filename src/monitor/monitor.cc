@@ -9,21 +9,21 @@ namespace morph {
 
 namespace monitor {
 
-Monitor::Monitor(const std::string &name, const std::string &monitor_addr):
-    name(name) {
+Monitor::Monitor(const Config &config):
+    name(config.this_info->name) {
+
   if (!file_exists(name.c_str())) {
     assert(create_directory(name.c_str()).is_ok());
   }
 
   logger = init_logger(name);
   assert(logger != nullptr);
-
   logger->debug("logger initialized");
   
-  service = std::make_unique<MonitorServiceImpl>(name, monitor_addr);
+  service = std::make_unique<MonitorServiceImpl>(config);
 
   ServerBuilder builder;
-  builder.AddListeningPort(monitor_addr, grpc::InsecureServerCredentials())
+  builder.AddListeningPort(config.this_info->addr, grpc::InsecureServerCredentials())
          .RegisterService(service.get());
   server = builder.BuildAndStart();
   if (server == nullptr) {

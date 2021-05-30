@@ -4,6 +4,7 @@
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/fmt/bundled/printf.h>
+#include <iostream>
 
 #include "common/filename.h"
 #include "common/env.h"

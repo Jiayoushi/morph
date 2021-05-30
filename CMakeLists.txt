@@ -83,7 +83,6 @@ add_library(morph_grpc_proto
   ${PROTO_GRPC_PB_HEADER}
   ${PROTO_GRPC_PB_SOURCE})
 
-
 target_link_libraries(morph_grpc_proto
   ${_REFLECTION}
   ${_GRPC_GRPCPP}

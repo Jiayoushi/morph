@@ -52,7 +52,7 @@ void WriteBatchInternal::set_count(WriteBatch *b, int n) {
 }
 
 log::SequenceNumber WriteBatchInternal::sequence(const WriteBatch *b) {
-  return log::SequenceNumber(decode_fixed_32(b->rep.data()));
+  return log::SequenceNumber(decode_fixed_64(b->rep.data()));
 }
 
 void WriteBatchInternal::set_sequence(WriteBatch *b, log::SequenceNumber seq) {

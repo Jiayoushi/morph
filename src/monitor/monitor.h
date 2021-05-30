@@ -4,6 +4,7 @@
 #include <sys/types.h>
 #include <spdlog/sinks/basic_file_sink.h>
 
+#include "common/config.h"
 #include "common/nocopy.h"
 #include "common/network.h"
 #include "service_impl.h"
@@ -15,7 +16,7 @@ namespace monitor {
 
 class Monitor: NoCopy {
  public:
-  Monitor(const std::string &name, const NetworkAddress &monitor_addr);
+  Monitor(const Config &config);
 
   ~Monitor();
 

@@ -4,7 +4,6 @@
 #include <rpc/client.h>
 #include <common/types.h>
 #include <common/nocopy.h>
-#include <rpc/rpc_wrapper.h>
 #include <tests/test.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <proto_out/mds.grpc.pb.h>
