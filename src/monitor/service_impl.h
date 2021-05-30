@@ -9,6 +9,7 @@
 #include "common/cluster.h"
 #include "common/logger.h"
 #include "paxos_service.h"
+#include "cluster_manager.h"
 
 namespace morph {
 
@@ -17,119 +18,8 @@ namespace monitor {
 using grpc::Server;
 using grpc::ServerBuilder;
 using grpc::ServerContext;
-using MonitorService = monitor_rpc::MonitorService;
-using MonitorCluster = Cluster<MonitorService>;
-using MonitorInstance = MonitorCluster::ServiceInstance;
-using OssNames = std::vector<std::string>;
-using OssCluster = Cluster<oss_rpc::ObjectStoreService>;
+
 using namespace monitor_rpc;
-
-// This class is needed to provide the synchronization so that 
-// monitor can serve get requests while ask paxos to apply the changes.
-// TODO: generic this and move it to its own file
-// TODO: it should also allow to merge incoming requests while paxos is serving
-//       previous run
-class ClusterManager {
- public:
-  ClusterManager():
-    cur_oss_names(nullptr),
-    cur_serialized(nullptr),
-    cur_version(0),
-    current(nullptr),
-    next(nullptr) {
-
-    current = std::make_unique<OssCluster>(0);
-    next = std::make_unique<OssCluster>(0);
-    update_data(0, nullptr);
-  }
-
-  void add_current(std::unique_ptr<OssCluster> cluster) {
-    current = std::move(cluster);
-  }
-
-  // Change the current cluster to the next one. Called after paxos saves the log.
-  void update(const uint64_t version) {
-    std::lock_guard<std::mutex> lock(mutex);
-    current = next;
-    next = std::make_shared<OssCluster>(*current);
-    update_data(version, nullptr);
-  }
-
-  std::shared_ptr<OssNames> get_names() const {
-    std::lock_guard<std::mutex> lock(mutex);
-    return cur_oss_names;
-  }
-
-  std::shared_ptr<OssCluster> get_current(
-                                uint64_t *version, 
-                                std::shared_ptr<std::string> *serialized) const {
-    std::lock_guard<std::mutex> lock(mutex);
-    if (version != nullptr) {
-      *version = cur_version;
-    }
-    if (serialized != nullptr) {
-      *serialized = cur_serialized;
-    }
-    return current;
-  }
-
-  // Add instance to the *next* cluster, and return the serialized
-  // value upon success
-  ClusterErrorCode add_instance(const Info &info, std::string *serialized) {
-    ClusterErrorCode result = next->add_instance(info);
-    if (result == S_SUCCESS) {
-      *serialized = std::move(next->serialize());
-    }
-    return result;
-  }
-
-  ClusterErrorCode remove_instance(const Info &info, std::string *serialized) {
-    ClusterErrorCode result = next->remove_instance(info);
-    if (result == S_SUCCESS) {
-      *serialized = std::move(next->serialize());
-    }
-    return result;
-  }
-
-  void update_to(const uint64_t version, const std::string &value) {
-    std::unique_ptr<OssCluster> new_cluster = std::make_unique<OssCluster>();
-    new_cluster->update_cluster(value);
-
-    std::lock_guard<std::mutex> lock(mutex);
-
-    current = std::move(new_cluster);
-    next = std::make_unique<OssCluster>(*current);
-    update_data(version, &value);
-  }
-
- private:
-  void update_data(const uint64_t version, const std::string *serialized) {
-    assert(current != nullptr);
-    cur_version = version;
-
-    if (serialized) {
-      cur_serialized = std::make_shared<std::string>(*serialized);
-    } else {
-      cur_serialized = std::make_shared<std::string>(std::move(current->serialize()));
-    }
-
-    std::vector<Info> infos = current->get_cluster_infos();
-    cur_oss_names = std::make_shared<OssNames>();
-    for (const Info &info: infos) {
-      cur_oss_names->push_back(info.name);
-    }
-  }
-
-  mutable std::mutex mutex;
-
-  std::shared_ptr<OssNames> cur_oss_names;
-  std::shared_ptr<std::string> cur_serialized;
-  uint64_t cur_version;
-  
-  std::shared_ptr<OssCluster> current;
-  std::shared_ptr<OssCluster> next;
-};
-
 
 class MonitorServiceImpl final: public monitor_rpc::MonitorService::Service {
  public:
@@ -189,7 +79,7 @@ class MonitorServiceImpl final: public monitor_rpc::MonitorService::Service {
 
   Cluster<mds_rpc::MetadataService> mds_cluster;
   
-  ClusterManager oss_cluster_manager;
+  ClusterManager<OssCluster> oss_cluster_manager;
 
   std::atomic<bool> running;
 
