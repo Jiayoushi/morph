@@ -70,20 +70,27 @@ void Paxos::commit_handler(const uint32_t log_index,
 
 uint64_t Paxos::choose_new_proposal_number(Log *log) {
   assert(log != nullptr);
-  char buf[8];
-  char *buf_ptr = buf;
   uint64_t proposal;
 
   do {
     ++log->max_round;
-    //encode_fixed_32(buf_ptr, log->max_round);
-    //encode_fixed_32(buf_ptr + 4, server_id);
-    //proposal = decode_fixed_64(buf);
-    proposal = log->max_round;
+    proposal = to_proposal(log->max_round, server_id);
     assert(proposal != log->min_proposal);
   } while (proposal < log->min_proposal);
 
   return proposal;
+}
+
+uint64_t Paxos::to_proposal(const uint32_t max_round, const uint32_t server_id) {
+  uint64_t a = max_round;
+  a <<= 32;
+  a += std::numeric_limits<uint32_t>::max();
+
+  uint64_t b = std::numeric_limits<uint32_t>::max();
+  b <<= 32;
+  b += server_id;
+
+  return a & b;
 }
 
 void Paxos::get_last_chosen_log(uint32_t *log_index, std::string *value) {

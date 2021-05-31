@@ -97,6 +97,13 @@ class PaxosService {
                    const uint32_t log_index,
                    const uint64_t proposal);
 
+  // Format proposal number to string
+  static std::string pro_to_str(uint64_t proposal) {
+    return fmt::sprintf("%lu|%lu", 
+              proposal >> 32, 
+              proposal & std::numeric_limits<uint32_t>::max());
+  }
+
   const std::string this_name;
 
   std::mutex mutex;

@@ -2,6 +2,7 @@
 
 #include <future>
 #include <utility>
+#include "common/utils.h"
 
 namespace morph {
 namespace paxos {
@@ -212,16 +213,16 @@ std::unique_ptr<PvPair> PaxosService::send_prepare(
     request.set_log_index(log_index);
     request.set_proposer(this_name);
 
-    logger->info(fmt::sprintf("send_prepare to [%s]: log_index[%d] proposal[%lu] target_count[%d]",
-      instance->info.name.c_str(), log_index, proposal, target_count));
+    logger->info(fmt::sprintf("send_prepare to [%s]: log_index[%d] proposal[%s] target_count[%d]",
+      instance->info.name.c_str(), log_index, uint64_two(proposal), target_count));
 
     auto s = instance->stub->prepare(&ctx, request, &reply);
 
     logger->info(fmt::sprintf(
-      "send_prepare [%s]: log_index[%d] proposal[%lu] target_count[%d]."
-      " got result: ac_proposal[%lu] ac_value[%s] rpc[%d] ret[%d]",
-      instance->info.name.c_str(), log_index, proposal, target_count,
-      reply.accepted_proposal(), reply.accepted_value().c_str(),
+      "send_prepare [%s]: log_index[%d] proposal[%s] target_count[%d]."
+      " got result: ac_proposal[%s] ac_value[%s] rpc[%d] ret[%d]",
+      instance->info.name.c_str(), log_index, uint64_two(proposal), target_count,
+      uint64_two(reply.accepted_proposal()), reply.accepted_value().c_str(),
       s.error_code(), reply.ret_val()));
 
     if (!s.ok()) {
@@ -268,8 +269,8 @@ std::unique_ptr<uint64_t> PaxosService::send_accept(
     request.set_proposer(this_name);
 
     logger->info(fmt::sprintf(
-      "send accept index[%d] proposal[%lu] value[%s] to monitor[%s]",
-      log_index, proposal, value.c_str(), instance->info.name.c_str()
+      "send accept index[%d] proposal[%s] value[%s] to monitor[%s]",
+      log_index, uint64_two(proposal), value.c_str(), instance->info.name.c_str()
     ));
 
     auto s = instance->stub->accept(&ctx, request, &reply);
@@ -279,8 +280,8 @@ std::unique_ptr<uint64_t> PaxosService::send_accept(
     }
 
     logger->info(fmt::sprintf(
-      "send accept index[%d] proposal[%lu] to monitor[%s]. Result: rpc[%d], ret[%d]",
-      log_index, proposal, instance->info.name, s.error_code(), reply.ret_val()
+      "send accept index[%d] proposal[%s] to monitor[%s]. Result: rpc[%d], ret[%d]",
+      log_index, uint64_two(proposal), instance->info.name, s.error_code(), reply.ret_val()
     ));
 
     if (reply.ret_val() == S_NOT_LEADER) {
@@ -309,8 +310,8 @@ void PaxosService::send_commit(std::shared_ptr<MonitorInstance> instance,
   monitor_rpc::CommitReply reply;
 
   logger->info(fmt::sprintf(
-    "send commit index[%d] proposal[%lu] to monitor[%s]",
-    log_index, proposal, instance->info.name
+    "send commit index[%d] proposal[%s] to monitor[%s]",
+    log_index, uint64_two(proposal), instance->info.name
   ));
 
   std::chrono::system_clock::time_point deadline = 
@@ -322,8 +323,8 @@ void PaxosService::send_commit(std::shared_ptr<MonitorInstance> instance,
   auto s = instance->stub->commit(&ctx, request, &reply);
 
   logger->info(fmt::sprintf(
-    "send commit index[%d] proposal[%lu] to monitor[%s]. Result: rpc[%d], ret[%d]",
-    log_index, proposal, instance->info.name,  s.error_code(), reply.ret_val()
+    "send commit index[%d] proposal[%s] to monitor[%s]. Result: rpc[%d], ret[%d]",
+    log_index, uint64_two(proposal), instance->info.name,  s.error_code(), reply.ret_val()
   ));
 
   if (!s.ok()) {

@@ -285,14 +285,14 @@ TEST(Monitor, FaultTolerant) {
   ASSERT_TRUE(tester.majority_consensus_reached());
   fprintf(stderr, "passed\n");
 
-  fprintf(stderr, "test majority consensus when nodes restart\n");
+  fprintf(stderr, "test consensus when nodes restart\n");
   tester.restart(0);
   tester.add_oss();
-  ASSERT_TRUE(tester.majority_consensus_reached());
 
   tester.restart(1);
   tester.add_oss();
-  ASSERT_TRUE(tester.majority_consensus_reached());
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+  ASSERT_TRUE(tester.consensus_reached());
   fprintf(stderr, "passed\n");
 
   fprintf(stderr, "test majority consensus after leader node is down\n");

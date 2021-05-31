@@ -65,6 +65,7 @@ struct Log {
   MSGPACK_DEFINE_ARRAY(max_round, min_proposal, accepted_proposal, accepted_value);
 
  private:
+
   friend class Paxos;
   
   uint32_t log_index;
@@ -106,6 +107,9 @@ class Paxos {
 
  private:
   void run(Log *log, const std::string &value);
+
+  uint64_t to_proposal(const uint32_t max_round, const uint32_t server_id);
+
 
   std::shared_ptr<spdlog::logger> logger;
 

@@ -4,7 +4,7 @@
 #include <future>
 
 #include "common/env.h"
-
+#include "common/utils.h"
 
 namespace morph {
 
@@ -171,8 +171,8 @@ grpc::Status MonitorServiceImpl::prepare(ServerContext *context,
   std::string accepted_value;
   int ret_val = S_SUCCESS;
 
-  logger->info(fmt::sprintf("prepare: log_index[%d] proposal[%d]",
-    request->log_index(), request->proposal()));
+  logger->info(fmt::sprintf("prepare: log_index[%d] proposal[%s]",
+    request->log_index(), uint64_two(request->proposal())));
 
   if (paxos_service->is_leader(request->proposer())) {
     paxos_service->prepare_handler(request->log_index(), request->proposal(), 
@@ -199,8 +199,8 @@ grpc::Status MonitorServiceImpl::accept(ServerContext *context,
   int ret_val = S_SUCCESS;
 
   logger->info(fmt::sprintf(
-    "accept request received: index[%d] proposal[%lu] value[%s]",
-    request->log_index(), request->proposal(), request->value()
+    "accept request received: index[%d] proposal[%s] value[%s]",
+    request->log_index(), uint64_two(request->proposal()), request->value()
   ));
 
   if (paxos_service->is_leader(request->proposer())) {
@@ -211,8 +211,8 @@ grpc::Status MonitorServiceImpl::accept(ServerContext *context,
   }
 
    logger->info(fmt::sprintf(
-    "accept request received: index[%d] proposal[%lu] value[%s]. Return ret",
-    request->log_index(), request->proposal(), request->value(), ret_val
+    "accept request received: index[%d] proposal[%s] value[%s]. Return ret",
+    request->log_index(), uint64_two(request->proposal()), request->value(), ret_val
   ));
 
   reply->set_ret_val(ret_val);
@@ -229,8 +229,8 @@ grpc::Status MonitorServiceImpl::commit(ServerContext *context,
   uint64_t new_version;
 
   logger->info(fmt::sprintf(
-    "commit request received: index[%d] proposal[%lu]",
-    request->log_index(), request->proposal()
+    "commit request received: index[%d] proposal[%s]",
+    request->log_index(), uint64_two(request->proposal())
   ));
 
   paxos_service->commit_handler(request->log_index(), request->proposal());
@@ -244,8 +244,8 @@ grpc::Status MonitorServiceImpl::commit(ServerContext *context,
   }
 
   logger->info(fmt::sprintf(
-    "commit request received: index[%d] proposal[%lu]. Old version[%lu], New version[%lu]\n",
-    request->log_index(), request->proposal(), current_version, new_version
+    "commit request received: index[%d] proposal[%s]. Old version[%lu], New version[%lu]\n",
+    request->log_index(), uint64_two(request->proposal()), current_version, new_version
   ));
 
   reply->set_ret_val(S_SUCCESS);

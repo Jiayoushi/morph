@@ -6,6 +6,7 @@
 #include <rpc/msgpack.hpp>
 #include <bitset>
 #include <atomic>
+#include <spdlog/fmt/bundled/printf.h>
 
 #include "status.h"
 #include "env.h"
@@ -102,6 +103,13 @@ inline bool get_length_prefixed_slice(Slice *input, Slice *result) {
 inline void put_length_prefixed_slice(std::string *dst, const Slice &value) {
   put_varint32(dst, value.size());
   dst->append(value.data(), value.size());
+}
+
+// Format uint64_t number to a string of two uint32_t
+inline std::string uint64_two(uint64_t v) {
+  return fmt::sprintf("%lu|%lu", 
+              v >> 32, 
+              v & std::numeric_limits<uint32_t>::max());
 }
 
 } // namespace morph
