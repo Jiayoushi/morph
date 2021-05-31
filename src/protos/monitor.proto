@@ -42,6 +42,8 @@ message AddOssRequest {
 
 message AddOssReply {
   int32 ret_val = 1;
+  string leader_name = 2;
+  string leader_addr = 3;
 }
 
 message AddMdsRequest {

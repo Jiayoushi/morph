@@ -29,11 +29,15 @@ MonitorServiceImpl::MonitorServiceImpl(const Config &config):
   }
 
   paxos_service = std::make_unique<paxos::PaxosService>(this_name, monitor_cluster);
+
+  heartbeat_thread = std::make_unique<std::thread>(
+    &MonitorServiceImpl::heartbeat_routine, this);
 }
 
 
 MonitorServiceImpl::~MonitorServiceImpl() {
   running = false;
+  heartbeat_thread->join();
 }
 
 grpc::Status MonitorServiceImpl::get_oss_cluster(ServerContext *context, 
@@ -68,15 +72,25 @@ grpc::Status MonitorServiceImpl::get_oss_cluster(ServerContext *context,
 grpc::Status MonitorServiceImpl::add_oss(ServerContext *context, 
                                          const AddOssRequest *request, 
                                          AddOssReply *reply) {
-  int ret_val;
+  int ret_val = S_SUCCESS;
   std::string serialized;
   Info info(request->info().name(), request->info().addr());
+  grpc::Status status;
 
-  logger->info(fmt::sprintf("add_oss: name[%s] addr[%s]\n",
-    info.name, info.addr));
+  auto leader = paxos_service->get_leader();
 
-  if (!paxos_service->is_leader(this_name)) {
+  logger->info(fmt::sprintf("add_oss: leader[%s] name[%s] addr[%s]\n",
+    leader->info.name.c_str(), info.name.c_str(), info.addr.c_str()));
+
+  if (leader->info.name != this_name) {
     ret_val = S_NOT_LEADER;
+
+    reply->set_leader_name(leader->info.name);
+    reply->set_leader_addr(leader->info.addr);
+    // TODO: you simply cannot redirect right now. Because it's possible the leader
+    //       is handling add_oss and is requesting this monitor to handle prepare
+    //       which leads to deadlock.
+    //status = redirect_add_oss(paxos_service->get_leader(), request, reply);
   } else {
     ret_val = oss_cluster_manager.add_instance(info, &serialized);
   
@@ -90,14 +104,44 @@ grpc::Status MonitorServiceImpl::add_oss(ServerContext *context,
 
       oss_cluster_manager.update(log_index + 1);
     }
+
   }
 
-  logger->info(fmt::sprintf("add_oss: name[%s] addr[%s] returns[%d]\n",
-    info.name, info.addr, ret_val));
-
   reply->set_ret_val(ret_val);
-  return grpc::Status::OK;
+
+  logger->info(fmt::sprintf(
+    "add_oss leader[%s]: Request: name[%s] addr[%s] returns rpc[%d] ret[%d]\n",
+    leader->info.name.c_str(), info.name.c_str(), info.addr.c_str(), 
+    status.error_code(), reply->ret_val()));
+
+  return status;
 }
+
+grpc::Status MonitorServiceImpl::redirect_add_oss(
+                                     std::shared_ptr<MonitorInstance> instance, 
+                                     const AddOssRequest *request,
+                                     AddOssReply *reply) {
+  AddOssRequest dup_request;
+  AddOssReply dup_reply;
+  grpc::ClientContext ctx;
+
+  OssInfo *info = new OssInfo();
+  info->set_name(request->info().name());
+  info->set_addr(request->info().addr());
+
+  logger->info(fmt::sprintf("redirect_add_oss: name[%s] addr[%s]\n",
+    info->name(), info->addr()));
+
+  dup_request.set_allocated_info(info);
+  auto status = instance->stub->add_oss(&ctx, dup_request, &dup_reply);
+
+  logger->info(fmt::sprintf("redirect_add_oss: name[%s] addr[%s]. rpc code(%d) ret_val(%d)\n",
+    info->name(), info->addr(), status.error_code(), dup_reply.ret_val()));
+
+  reply->set_ret_val(dup_reply.ret_val());
+  return status;
+}
+
 
 grpc::Status MonitorServiceImpl::add_mds(ServerContext *context, 
                                          const AddMdsRequest *request,
@@ -117,12 +161,20 @@ grpc::Status MonitorServiceImpl::prepare(ServerContext *context,
   std::string accepted_value;
   int ret_val = S_SUCCESS;
 
+  logger->info(fmt::sprintf("prepare: log_index[%d] proposal[%d]",
+    request->log_index(), request->proposal()));
+
   if (paxos_service->is_leader(request->proposer())) {
     paxos_service->prepare_handler(request->log_index(), request->proposal(), 
                                    &accepted_proposal, &accepted_value);
   } else {
     ret_val = S_NOT_LEADER;
   }
+
+  // TODO: If you log more information, it can lead to huge slowdown
+  //       for reasons unknown.
+  //       2021/5/31 22:45.
+  logger->info(fmt::sprintf("prepare exit. ret_val[%d]", ret_val));
 
   reply->set_ret_val(ret_val);
   reply->set_accepted_proposal(accepted_proposal);
@@ -295,6 +347,10 @@ void MonitorServiceImpl::broadcast_routine() {
     // TODO: it's obviously a waste to do this, but it will do for now.
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
+}
+
+void MonitorServiceImpl::heartbeat_routine() {
+
 }
 
 } // namespace monitor

@@ -54,6 +54,8 @@ class PaxosService {
 
   bool is_leader(const std::string &name);
 
+  std::shared_ptr<MonitorInstance> get_leader();
+
   void get_last_chosen_log(uint32_t *log_index, std::string *value);
 
  private:

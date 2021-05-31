@@ -61,14 +61,17 @@ class MonitorServiceImpl final: public monitor_rpc::MonitorService::Service {
                          const HeartbeatRequest* request, 
                          HeartbeatReply *reply) override;
 
-
-  // TODO: this should be private, but for testing purpose it is public for now
-  void broadcast_new_oss_cluster();
-
+ private:
   // NOT USED
+  void broadcast_new_oss_cluster();
   void broadcast_routine();
 
- private:
+  void heartbeat_routine();
+
+  grpc::Status redirect_add_oss(std::shared_ptr<MonitorInstance> instance, 
+                                const AddOssRequest *request, 
+                                AddOssReply *reply);
+
   const std::string this_name;
 
   const NetworkAddress &this_addr;
@@ -83,11 +86,9 @@ class MonitorServiceImpl final: public monitor_rpc::MonitorService::Service {
 
   std::atomic<bool> running;
 
-  // A thread that is responsible for updating the monitor to the latest
-  // Only non-leader monitor needs this
-  std::unique_ptr<std::thread> update_thread;          
-
   std::unique_ptr<paxos::PaxosService> paxos_service;
+
+  std::unique_ptr<std::thread> heartbeat_thread;
 };
 
 }

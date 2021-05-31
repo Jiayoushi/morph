@@ -147,29 +147,39 @@ class ClusterTester {
     const Info fo(name, addr);
 
     oss_cluster.add_instance(fo);
+    std::shared_ptr<Instance> leader = nullptr;
 
     while (true) {
-      auto instance = instances.begin();
-      for (int i = 0; i < (rand() % instances.size()); ++i) {
-        ++instance;
+      if (leader == nullptr) {
+        auto instance = instances.begin();
+        int t = rand() % instances.size();
+        for (int i = 0; i < t; ++i) {
+          ++instance;
+        }
+        leader = instance->second;
       }
 
-      OssInfo *info = new OssInfo();
-      info->set_name(name);
-      info->set_addr(addr);
-
-      auto leader = instance->second;
       grpc::ClientContext ctx;
       AddOssRequest request;
       AddOssReply reply;
 
+      fprintf(stderr, "ask [%s]\n", leader->info.name.c_str());
+      OssInfo *info = new OssInfo();
+      info->set_name(name);
+      info->set_addr(addr);
       request.set_allocated_info(info);
+
       auto s = leader->stub->add_oss(&ctx, request, &reply);
 
-      if (!s.ok() || reply.ret_val() != S_SUCCESS) {
+      if (!s.ok()) {
+        leader = nullptr;
         continue;
       }
-      break;
+      if (reply.ret_val() == S_SUCCESS) {
+        break;
+      }
+      leader = instances[reply.leader_name()];
+      assert(leader != nullptr);
     }
   }
 
@@ -233,7 +243,7 @@ class ClusterTester {
       }
     }
 
-    //fprintf(stderr, "REACHED [%d] target [%d]\n", reached, target);
+    fprintf(stderr, "REACHED [%d] target [%d]\n", reached, target);
     return reached >= target;
   }
 

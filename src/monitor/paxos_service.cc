@@ -205,7 +205,7 @@ std::unique_ptr<PvPair> PaxosService::send_prepare(
     monitor_rpc::PrepareReply reply;
 
     std::chrono::system_clock::time_point deadline = 
-      std::chrono::system_clock::now() + std::chrono::milliseconds(100);
+      std::chrono::system_clock::now() + std::chrono::milliseconds(1000);
     ctx.set_deadline(deadline);
     request.set_proposal(proposal);
     request.set_log_index(log_index);
@@ -216,7 +216,7 @@ std::unique_ptr<PvPair> PaxosService::send_prepare(
 
     auto s = instance->stub->prepare(&ctx, request, &reply);
     if (!s.ok()) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      std::this_thread::sleep_for(std::chrono::milliseconds(500));
       continue;
     }
 
@@ -244,7 +244,7 @@ std::unique_ptr<uint64_t> PaxosService::send_accept(
     monitor_rpc::AcceptReply reply;
 
     std::chrono::system_clock::time_point deadline = 
-      std::chrono::system_clock::now() + std::chrono::milliseconds(100);
+      std::chrono::system_clock::now() + std::chrono::milliseconds(1000);
     ctx.set_deadline(deadline);
     request.set_log_index(log_index);
     request.set_proposal(proposal);
@@ -253,7 +253,7 @@ std::unique_ptr<uint64_t> PaxosService::send_accept(
 
     auto s = instance->stub->accept(&ctx, request, &reply);
     if (!s.ok()) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      std::this_thread::sleep_for(std::chrono::milliseconds(500));
       continue;
     }
 
@@ -282,7 +282,7 @@ void PaxosService::send_commit(std::shared_ptr<MonitorInstance> instance,
   ));
 
   std::chrono::system_clock::time_point deadline = 
-    std::chrono::system_clock::now() + std::chrono::milliseconds(100);
+    std::chrono::system_clock::now() + std::chrono::milliseconds(1000);
   ctx.set_deadline(deadline);
   request.set_log_index(log_index);
   request.set_proposal(proposal);
@@ -294,15 +294,23 @@ void PaxosService::send_commit(std::shared_ptr<MonitorInstance> instance,
   }
 }
 
-bool PaxosService::is_leader(const std::string &name) {
+std::shared_ptr<MonitorInstance> PaxosService::get_leader() {
   std::vector<std::string> names;
+  std::shared_ptr<MonitorInstance> leader;
+
   for (auto x = monitor_cluster->cluster_map.begin(); 
        x != monitor_cluster->cluster_map.end();
        ++x) {
-    names.push_back(x->second->info.name);
+    if (leader == nullptr || x->second->info.name > leader->info.name) {
+      leader = x->second;
+    }
   }
-  sort(names.begin(), names.end());
-  return names.back() == name;
+  assert(leader != nullptr);
+  return leader;
+}
+
+bool PaxosService::is_leader(const std::string &name) {
+  return get_leader()->info.name == name;
 }
 
 void PaxosService::get_last_chosen_log(uint32_t *log_index, std::string *value) {
