@@ -75,9 +75,8 @@ class ClusterManager {
     std::lock_guard<std::mutex> lock(mutex);
 
     ClusterErrorCode result = next->add_instance(info);
-    if (result == S_SUCCESS) {
-      *serialized = std::move(next->serialize());
-    }
+    assert(result == S_SUCCESS);
+    *serialized = std::move(next->serialize());
     return result;
   }
 

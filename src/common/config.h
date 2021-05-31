@@ -15,14 +15,15 @@ namespace morph {
 struct Info {
   std::string name;
   NetworkAddress addr;
+  bool local;
 
   MSGPACK_DEFINE_ARRAY(name, addr);
 
   Info():
-    name(), addr() {}
+    name(), addr(), local(false) {}
 
   Info(const std::string &name, const NetworkAddress &addr):
-      name(name), addr(addr) {
+      name(name), addr(addr), local(false) {
     assert(verify_network_address(addr));
   }
 
@@ -67,6 +68,14 @@ struct Config {
   void set_this(size_t index) {
     assert(index < infos.size());
     assert(infos.size() == infos.capacity());
+
+    for (int i = 0; i < infos.size(); ++i) {
+      if (i == index) {
+        infos[i].local = true;
+      } else {
+        infos[i].local = false;
+      }
+    }
     this_info = &infos[index];
   }
 };

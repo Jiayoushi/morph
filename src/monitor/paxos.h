@@ -10,7 +10,7 @@ namespace paxos {
 
 // This is a proposal number that is invalid.
 // Valid numbers > this number.
-const uint64_t DEFAULT_PROPOSAL = 0;
+const uint64_t INVALID_PROPOSAL = 0;
 
 class Paxos;
 
@@ -27,7 +27,7 @@ struct Log {
 
   Log():
     log_index(0), state(NO_VALUE), max_round(0), 
-    min_proposal(DEFAULT_PROPOSAL), accepted_proposal(DEFAULT_PROPOSAL), 
+    min_proposal(INVALID_PROPOSAL), accepted_proposal(INVALID_PROPOSAL), 
     accepted_value() {}
 
   Log(const uint32_t log_index):
@@ -53,8 +53,8 @@ struct Log {
     log_index = 0;
     state = NO_VALUE;
     max_round = 0;
-    min_proposal = DEFAULT_PROPOSAL;
-    accepted_proposal = DEFAULT_PROPOSAL;
+    min_proposal = INVALID_PROPOSAL;
+    accepted_proposal = INVALID_PROPOSAL;
     accepted_value.clear();
   }
 

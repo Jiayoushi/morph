@@ -5,6 +5,7 @@
 
 #include "network.h"
 #include "config.h"
+#include "time.h"
 
 namespace morph {
 
@@ -44,15 +45,30 @@ class Cluster {
     Info info;
     StubType *stub;
 
+    MSGPACK_DEFINE_ARRAY(info);
+
     ServiceInstance() = delete;
 
     ServiceInstance(const Info &info):
-        info(info), stub(nullptr) {
+        info(info), stub(nullptr), last_heartbeat(now()) {
       std::shared_ptr<grpc::Channel> ch = 
           grpc::CreateChannel(info.addr, grpc::InsecureChannelCredentials());
       assert(ch != nullptr);
       stub = Service::NewStub(ch).release();
       assert(stub != nullptr);
+    }
+
+    void set_heartbeat_to_now() {
+      last_heartbeat.store(now());
+    }
+
+    bool is_local() const {
+      return info.local;
+    }
+
+    bool is_alive(const int timeout_interval) const {
+      double d = elapsed_in_ms(last_heartbeat);
+      return info.local || d < timeout_interval;
     }
 
     ServiceInstance & operator=(const ServiceInstance &x) {
@@ -72,7 +88,7 @@ class Cluster {
       delete stub;
     }
 
-    MSGPACK_DEFINE_ARRAY(info);
+    std::atomic<Timepoint> last_heartbeat;
   };
 
   Cluster() {}

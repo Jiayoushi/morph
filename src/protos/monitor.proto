@@ -94,7 +94,7 @@ message CommitRequest {
 }
 
 message CommitReply {
-
+  uint32 ret_val = 1;
 }
 
 message HeartbeatRequest {

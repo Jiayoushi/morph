@@ -39,7 +39,7 @@ class MonitorServiceImpl final: public monitor_rpc::MonitorService::Service {
                           const RemoveOssRequest *request, 
                           RemoveOssReply *reply) override;
 
-  grpc::Status add_mds(ServerContext *context, 
+  grpc::Status add_mds(ServerContext *context,
                        const AddMdsRequest *request, 
                        AddMdsReply *reply) override;
 
@@ -66,6 +66,8 @@ class MonitorServiceImpl final: public monitor_rpc::MonitorService::Service {
   void broadcast_new_oss_cluster();
   void broadcast_routine();
 
+  void send_heartbeat(std::shared_ptr<MonitorInstance> instance);
+  void broadcast_heartbeat();
   void heartbeat_routine();
 
   grpc::Status redirect_add_oss(std::shared_ptr<MonitorInstance> instance, 

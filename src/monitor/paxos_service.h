@@ -20,6 +20,9 @@ using MonitorCluster = Cluster<MonitorService>;
 using MonitorInstance = MonitorCluster::ServiceInstance;
 using ProposalValuePair = std::pair<uint64_t, std::string>;
 
+const int HEARTBEAT_BROADCAST_INTERVAL = 200;
+const int HEARTBEAT_TIMEOUT_INTERVAL = 800;
+
 struct PvPair {
   uint64_t accepted_proposal;
   std::string accepted_value;

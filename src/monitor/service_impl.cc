@@ -1,8 +1,10 @@
 #include "service_impl.h"
 
 #include <proto_out/oss.grpc.pb.h>
+#include <future>
 
 #include "common/env.h"
+
 
 namespace morph {
 
@@ -24,8 +26,8 @@ MonitorServiceImpl::MonitorServiceImpl(const Config &config):
   monitor_cluster = std::make_shared<MonitorCluster>(config);
 
   for (auto x = monitor_cluster->cluster_map.begin(); x != monitor_cluster->cluster_map.end(); ++x) {
-    logger->info(fmt::sprintf("instance added to monitor cluster: name[%s] addr[%s]\n",
-      x->second->info.name, x->second->info.addr));
+    logger->info(fmt::sprintf("instance added to monitor cluster: name[%s] addr[%s] local[%d]",
+      x->second->info.name, x->second->info.addr, x->second->info.local));
   }
 
   paxos_service = std::make_unique<paxos::PaxosService>(this_name, monitor_cluster);
@@ -79,7 +81,7 @@ grpc::Status MonitorServiceImpl::add_oss(ServerContext *context,
 
   auto leader = paxos_service->get_leader();
 
-  logger->info(fmt::sprintf("add_oss: leader[%s] name[%s] addr[%s]\n",
+  logger->info(fmt::sprintf("add_oss: leader[%s] name[%s] addr[%s]",
     leader->info.name.c_str(), info.name.c_str(), info.addr.c_str()));
 
   if (leader->info.name != this_name) {
@@ -94,6 +96,8 @@ grpc::Status MonitorServiceImpl::add_oss(ServerContext *context,
   } else {
     ret_val = oss_cluster_manager.add_instance(info, &serialized);
   
+    logger->info(fmt::sprintf("VALUE [%s]\n", serialized.c_str()));
+
     // Use paxos to replicate the log and then answer to the client
     if (ret_val == S_SUCCESS) {
       uint64_t log_index;
@@ -104,13 +108,12 @@ grpc::Status MonitorServiceImpl::add_oss(ServerContext *context,
 
       oss_cluster_manager.update(log_index + 1);
     }
-
   }
 
   reply->set_ret_val(ret_val);
 
   logger->info(fmt::sprintf(
-    "add_oss leader[%s]: Request: name[%s] addr[%s] returns rpc[%d] ret[%d]\n",
+    "add_oss leader[%s]: Request: name[%s] addr[%s] returns rpc[%d] ret[%d]",
     leader->info.name.c_str(), info.name.c_str(), info.addr.c_str(), 
     status.error_code(), reply->ret_val()));
 
@@ -188,13 +191,23 @@ grpc::Status MonitorServiceImpl::accept(ServerContext *context,
   uint64_t min_proposal;
   int ret_val = S_SUCCESS;
 
+  logger->info(fmt::sprintf(
+    "accept request received: index[%d] proposal[%lu] value[%s]",
+    request->log_index(), request->proposal(), request->value()
+  ));
+
   if (paxos_service->is_leader(request->proposer())) {
     paxos_service->accept_handler(request->log_index(), request->proposal(),
                                   request->value(), &min_proposal);
   } else {
     ret_val = S_NOT_LEADER;
   }
-  
+
+   logger->info(fmt::sprintf(
+    "accept request received: index[%d] proposal[%lu] value[%s]. Return ret",
+    request->log_index(), request->proposal(), request->value(), ret_val
+  ));
+
   reply->set_ret_val(ret_val);
   reply->set_min_proposal(min_proposal);
   return grpc::Status::OK;
@@ -209,7 +222,7 @@ grpc::Status MonitorServiceImpl::commit(ServerContext *context,
   uint64_t new_version;
 
   logger->info(fmt::sprintf(
-    "commit request received: index[%d] proposal[%lu]\n",
+    "commit request received: index[%d] proposal[%lu]",
     request->log_index(), request->proposal()
   ));
 
@@ -228,12 +241,20 @@ grpc::Status MonitorServiceImpl::commit(ServerContext *context,
     request->log_index(), request->proposal(), current_version, new_version
   ));
 
+  reply->set_ret_val(S_SUCCESS);
   return grpc::Status::OK;
 }
 
 grpc::Status MonitorServiceImpl::heartbeat(ServerContext *context, 
                                          const HeartbeatRequest* request, 
                                          HeartbeatReply *reply) {
+  auto instance = monitor_cluster->get_instance(request->server_name());
+  assert(instance != nullptr);
+
+  logger->info(fmt::sprintf("heartbeat: %s is kept alive", instance->info.name.c_str()));
+
+  instance->set_heartbeat_to_now();
+
   return grpc::Status::OK;
 }
 
@@ -349,8 +370,51 @@ void MonitorServiceImpl::broadcast_routine() {
   }
 }
 
-void MonitorServiceImpl::heartbeat_routine() {
+void MonitorServiceImpl::send_heartbeat(std::shared_ptr<MonitorInstance> instance) {
+  while (running) {
+    grpc::ClientContext ctx;
+    HeartbeatRequest request;
+    HeartbeatReply reply;
 
+    request.set_server_name(this_name);
+    instance->stub->heartbeat(&ctx, request, &reply);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(
+      paxos::HEARTBEAT_BROADCAST_INTERVAL));
+  }
+}
+
+void MonitorServiceImpl::heartbeat_routine() {
+  Timepoint start = now();
+
+  std::vector<std::thread> ths;
+
+  for (auto p = monitor_cluster->cluster_map.begin();
+       p != monitor_cluster->cluster_map.end();
+       ++p) {
+    if (!p->second->is_local()) {
+      ths.push_back(std::thread(&MonitorServiceImpl::send_heartbeat, 
+                                this, p->second));
+    }
+  } 
+
+  while (running) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+
+    for (auto p = monitor_cluster->cluster_map.begin();
+       p != monitor_cluster->cluster_map.end();
+       ++p) {   
+
+      if (!p->second->is_alive(paxos::HEARTBEAT_TIMEOUT_INTERVAL)) {
+        logger->info(fmt::sprintf("[%s] seems to be dead. diff[%f]", 
+                     p->second->info.name.c_str(), elapsed_in_ms(p->second->last_heartbeat)));
+      }
+    }
+  }
+
+  for (auto &th: ths) {
+    th.join();
+  }
 }
 
 } // namespace monitor

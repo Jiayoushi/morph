@@ -163,7 +163,7 @@ class ClusterTester {
       AddOssRequest request;
       AddOssReply reply;
 
-      fprintf(stderr, "ask [%s]\n", leader->info.name.c_str());
+      //fprintf(stderr, "ask [%s]\n", leader->info.name.c_str());
       OssInfo *info = new OssInfo();
       info->set_name(name);
       info->set_addr(addr);
@@ -243,13 +243,14 @@ class ClusterTester {
       }
     }
 
-    fprintf(stderr, "REACHED [%d] target [%d]\n", reached, target);
+    //fprintf(stderr, "REACHED [%d] target [%d]\n", reached, target);
     return reached >= target;
   }
 
   bool equal_set(const std::string &s) {
     Cluster<oss_rpc::ObjectStoreService> recv;
     recv.update_cluster(s);
+  
     return recv == oss_cluster;
   }
 
@@ -276,6 +277,8 @@ TEST(Monitor, FaultTolerant) {
 
   tester.shutdown(0);
   tester.shutdown(1);
+
+  std::this_thread::sleep_for(std::chrono::seconds(2));
 
   tester.add_oss();
   ASSERT_TRUE(tester.majority_consensus_reached());

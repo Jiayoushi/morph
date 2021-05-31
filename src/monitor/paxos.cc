@@ -45,7 +45,7 @@ void Paxos::prepare_handler(const uint32_t log_index,
     *out_accepted_proposal = log.accepted_proposal;
     *out_accepted_value = log.accepted_value;
   } else {
-    *out_accepted_proposal = DEFAULT_PROPOSAL;
+    *out_accepted_proposal = INVALID_PROPOSAL;
     *out_accepted_value = "";
   }
 }
@@ -76,9 +76,10 @@ uint64_t Paxos::choose_new_proposal_number(Log *log) {
 
   do {
     ++log->max_round;
-    encode_fixed_32(buf_ptr, server_id);
-    encode_fixed_32(buf_ptr + 4, log->max_round);
-    proposal = decode_fixed_64(buf);
+    //encode_fixed_32(buf_ptr, log->max_round);
+    //encode_fixed_32(buf_ptr + 4, server_id);
+    //proposal = decode_fixed_64(buf);
+    proposal = log->max_round;
     assert(proposal != log->min_proposal);
   } while (proposal < log->min_proposal);
 
