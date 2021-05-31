@@ -190,6 +190,14 @@ class ClusterTester {
   bool majority_consensus_reached() {
     return check_consensus(1 + (instances.size() / 2));
   }
+  
+  bool consensus_on_final_cluster_reached() {
+    return check_consensus_on_final_cluster(instances.size());
+  }
+
+  bool majority_consensus_on_final_cluster_reached() {
+    return check_consensus_on_final_cluster(1 + (instances.size() / 2));
+  }
 
   void shutdown(const int index) {
     std::string name = "mon" + std::to_string(index);
@@ -221,6 +229,33 @@ class ClusterTester {
   };
 
   bool check_consensus(const int target) {
+    std::unordered_map<std::string, int> m;
+
+    for (auto x = instances.begin(); x != instances.end(); ++x) {
+      auto stub = x->second->stub;
+      GetLogsRequest request;
+      GetLogsReply reply;
+      grpc::ClientContext ctx;
+      
+      auto status = stub->get_logs(&ctx, request, &reply);
+
+      if (!status.ok()) {
+        continue;
+      }
+
+      ++m[reply.logs()];
+    }
+
+    for (auto p = m.cbegin(); p != m.cend(); ++p) {
+      if (p->second >= target) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  bool check_consensus_on_final_cluster(const int target) {
     int reached = 0;
 
     for (auto x = instances.begin(); x != instances.end(); ++x) {

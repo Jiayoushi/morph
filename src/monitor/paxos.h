@@ -62,7 +62,14 @@ struct Log {
     return log_index;
   }
 
-  MSGPACK_DEFINE_ARRAY(max_round, min_proposal, accepted_proposal, accepted_value);
+ 
+  // Use this function to persist the states. Do not directly using msgpack
+  // since it only include some parts of the state.
+  void persist() {
+    assert(false && "NOT YET IMPLEMENTED");
+  }
+
+  MSGPACK_DEFINE_ARRAY(accepted_proposal, accepted_value);
 
  private:
 

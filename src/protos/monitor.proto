@@ -12,6 +12,7 @@ service MonitorService {
   rpc prepare (PrepareRequest) returns (PrepareReply) {};
   rpc accept (AcceptRequest) returns (AcceptReply) {};
   rpc commit (CommitRequest) returns (CommitReply) {};
+  rpc get_logs (GetLogsRequest) returns (GetLogsReply) {};
   rpc heartbeat (HeartbeatRequest) returns (HeartbeatReply) {};
 }
 
@@ -104,3 +105,12 @@ message HeartbeatRequest {
 message HeartbeatReply {
 
 }
+
+message GetLogsRequest {
+
+}
+
+message GetLogsReply {
+  bytes logs = 1;
+}
+

@@ -363,5 +363,15 @@ void PaxosService::get_last_chosen_log(uint32_t *log_index, std::string *value) 
   paxos->get_last_chosen_log(log_index, value);
 }
 
+// TODO: this is dangerous.
+//       how to prevent race condition?
+//       one way is to lock each log, and serialize logs one by one
+void PaxosService::get_serialized_logs(std::string *buf) const {
+  std::stringstream ss;
+  clmdep_msgpack::pack(ss, *paxos);
+  *buf = std::move(ss.str());
+}
+
+
 } // namespace paxos
 } // namespace morph

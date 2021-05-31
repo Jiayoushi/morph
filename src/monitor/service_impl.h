@@ -61,6 +61,11 @@ class MonitorServiceImpl final: public monitor_rpc::MonitorService::Service {
                          const HeartbeatRequest* request, 
                          HeartbeatReply *reply) override;
 
+  // For now it is only used for testing purpose
+  grpc::Status get_logs(ServerContext *context,
+                        const GetLogsRequest *request,
+                        GetLogsReply *reply) override;
+
  private:
   // NOT USED
   void broadcast_new_oss_cluster();

@@ -286,6 +286,23 @@ grpc::Status MonitorServiceImpl::remove_oss(ServerContext *context,
   return grpc::Status::OK;
 }
 
+grpc::Status MonitorServiceImpl::get_logs(ServerContext *context,
+                                          const GetLogsRequest *request,
+                                          GetLogsReply *reply) {
+
+  logger->info("get_logs invoked\n");
+
+  std::string buf;
+
+  paxos_service->get_serialized_logs(&buf);
+  reply->set_logs(buf);
+
+  logger->info("get_logs returend [%s].\n",
+    buf.c_str());
+
+  return grpc::Status::OK;
+}
+
 // TODO(URGENT): redudant code. Modify the service interface.
 void MonitorServiceImpl::broadcast_new_oss_cluster() {
   uint64_t version;
