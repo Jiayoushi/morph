@@ -141,21 +141,36 @@ class ClusterTester {
   }
 
   void add_oss() {
-    auto leader = instances.rbegin()->second;
-    grpc::ClientContext ctx;
-    AddOssRequest request;
-    AddOssReply reply;
+    int oss_id = get_next_oss();
+    std::string name = "oss" + std::to_string(oss_id); 
+    std::string addr = "0.0.0.0:" + std::to_string(6000 + oss_id);
+    const Info fo(name, addr);
 
-    OssInfo *info = get_next_oss();
-    request.set_allocated_info(info);
-
-    const Info fo(info->name(), info->addr());
     oss_cluster.add_instance(fo);
 
-    auto s = leader->stub->add_oss(&ctx, request, &reply);
+    while (true) {
+      auto instance = instances.begin();
+      for (int i = 0; i < (rand() % instances.size()); ++i) {
+        ++instance;
+      }
 
-    assert(s.ok()); // TODO: ...
-    assert(reply.ret_val() == 0);
+      OssInfo *info = new OssInfo();
+      info->set_name(name);
+      info->set_addr(addr);
+
+      auto leader = instance->second;
+      grpc::ClientContext ctx;
+      AddOssRequest request;
+      AddOssReply reply;
+
+      request.set_allocated_info(info);
+      auto s = leader->stub->add_oss(&ctx, request, &reply);
+
+      if (!s.ok() || reply.ret_val() != S_SUCCESS) {
+        continue;
+      }
+      break;
+    }
   }
 
   bool consensus_reached() {
@@ -228,12 +243,8 @@ class ClusterTester {
     return recv == oss_cluster;
   }
 
-  OssInfo * get_next_oss() {
-    OssInfo *info = new OssInfo();
-    info->set_name("oss" + std::to_string(next_oss_id));
-    info->set_addr("0.0.0.0:" + std::to_string(6000 + next_oss_id));
-    ++next_oss_id;
-    return info;
+  int get_next_oss() {
+    return ++next_oss_id;
   }
 
   Config config;
