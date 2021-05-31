@@ -163,7 +163,7 @@ class ClusterTester {
       AddOssRequest request;
       AddOssReply reply;
 
-      //fprintf(stderr, "ask [%s]\n", leader->info.name.c_str());
+      fprintf(stderr, "ask [%s]\n", leader->info.name.c_str());
       OssInfo *info = new OssInfo();
       info->set_name(name);
       info->set_addr(addr);
@@ -243,7 +243,7 @@ class ClusterTester {
       }
     }
 
-    //fprintf(stderr, "REACHED [%d] target [%d]\n", reached, target);
+    fprintf(stderr, "REACHED [%d] target [%d]\n", reached, target);
     return reached >= target;
   }
 
@@ -269,17 +269,18 @@ class ClusterTester {
 TEST(Monitor, FaultTolerant) {
   ClusterTester tester(5);
  
+  fprintf(stderr, "A\n");
   tester.add_oss();
   ASSERT_TRUE(tester.majority_consensus_reached());
 
+  fprintf(stderr, "B\n");
   tester.add_oss();
   ASSERT_TRUE(tester.majority_consensus_reached());
 
   tester.shutdown(0);
   tester.shutdown(1);
 
-  std::this_thread::sleep_for(std::chrono::seconds(2));
-
+  fprintf(stderr, "C\n");
   tester.add_oss();
   ASSERT_TRUE(tester.majority_consensus_reached());
 

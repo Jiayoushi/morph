@@ -79,14 +79,13 @@ grpc::Status MonitorServiceImpl::add_oss(ServerContext *context,
   Info info(request->info().name(), request->info().addr());
   grpc::Status status;
 
-  auto leader = paxos_service->get_leader();
+  std::shared_ptr<MonitorInstance> leader = paxos_service->get_leader();
 
   logger->info(fmt::sprintf("add_oss: leader[%s] name[%s] addr[%s]",
     leader->info.name.c_str(), info.name.c_str(), info.addr.c_str()));
 
   if (leader->info.name != this_name) {
     ret_val = S_NOT_LEADER;
-
     reply->set_leader_name(leader->info.name);
     reply->set_leader_addr(leader->info.addr);
     // TODO: you simply cannot redirect right now. Because it's possible the leader
@@ -96,17 +95,25 @@ grpc::Status MonitorServiceImpl::add_oss(ServerContext *context,
   } else {
     ret_val = oss_cluster_manager.add_instance(info, &serialized);
   
-    logger->info(fmt::sprintf("VALUE [%s]\n", serialized.c_str()));
-
     // Use paxos to replicate the log and then answer to the client
     if (ret_val == S_SUCCESS) {
       uint64_t log_index;
   
-      for (bool chosen = false; chosen == false; ) {
+      bool chosen = false;
+      while (!chosen) {
+        leader = paxos_service->get_leader();
+        if (leader->info.name != this_name) {
+          ret_val = S_NOT_LEADER;
+          reply->set_leader_name(leader->info.name);
+          reply->set_leader_addr(leader->info.addr);
+          break;
+        }
         chosen = paxos_service->run(serialized, &log_index);
       }
 
-      oss_cluster_manager.update(log_index + 1);
+      if (chosen) {
+        oss_cluster_manager.update(log_index + 1);
+      }
     }
   }
 

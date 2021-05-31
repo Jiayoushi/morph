@@ -60,6 +60,10 @@ bool PaxosService::run(const std::string &value, uint64_t *log_index) {
   // Phase-1
   std::unique_ptr<PvPair> pair = broadcast_prepare(log->get_log_index(), proposal);
 
+  if (!is_leader(this_name)) {
+    return false;
+  }
+
   // Phase-2
   const std::string *value_to_send = nullptr;
   if (pair->accepted_proposal == 0) {
@@ -224,12 +228,16 @@ std::unique_ptr<PvPair> PaxosService::send_prepare(
       std::this_thread::sleep_for(std::chrono::milliseconds(500));
       continue;
     }
-
-    ++(*response_count);
     if (reply.ret_val() == S_NOT_LEADER) {
-      // TODO: need to check and then abort if the local really is not the leader anymore
+      std::this_thread::sleep_for(std::chrono::milliseconds(500));
+      if (!is_leader(this_name)) {
+        ++(*response_count);
+        return std::make_unique<PvPair>(INVALID_PROPOSAL, "");
+      }
       continue;
     }
+
+    ++(*response_count);
     assert(reply.ret_val() == S_SUCCESS);
     
 
@@ -238,7 +246,7 @@ std::unique_ptr<PvPair> PaxosService::send_prepare(
     return std::make_unique<PvPair>(v, val);
   }
 
-  return std::make_unique<PvPair>(0, "");
+  return std::make_unique<PvPair>(INVALID_PROPOSAL, "");
 }
 
 std::unique_ptr<uint64_t> PaxosService::send_accept(
@@ -275,11 +283,16 @@ std::unique_ptr<uint64_t> PaxosService::send_accept(
       log_index, proposal, instance->info.name, s.error_code(), reply.ret_val()
     ));
 
-    ++(*response_count);
     if (reply.ret_val() == S_NOT_LEADER) {
-      // TODO: need to check and then abort if the local really is not the leader anymore
+      std::this_thread::sleep_for(std::chrono::milliseconds(500));
+      if (!is_leader(this_name)) {
+        ++(*response_count);
+        return std::make_unique<uint64_t>(std::numeric_limits<uint64_t>::max());
+      }
       continue;
     }
+
+    ++(*response_count);
     assert(reply.ret_val() == S_SUCCESS);
 
     return std::make_unique<uint64_t>(reply.min_proposal());
@@ -328,9 +341,9 @@ std::shared_ptr<MonitorInstance> PaxosService::get_leader() {
        ++x) {
     auto instance = x->second;
 
-    //if (!instance->is_alive(paxos::HEARTBEAT_TIMEOUT_INTERVAL)) {
-    //  continue;
-    //}
+    if (!instance->is_alive(paxos::HEARTBEAT_TIMEOUT_INTERVAL)) {
+      continue;
+    }
 
     if (leader == nullptr ||
         x->second->info.name > leader->info.name) {
