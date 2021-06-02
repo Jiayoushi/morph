@@ -1,9 +1,6 @@
 Replication:
    Keep sending Accept RPC until leader and other servers have identical first_unchosen_index.
 
-Notes:
-  
-
 Q: When should a server starts sending out Accept to replicate chosen entries if it thinks
    it's the leader?
 A: What happens if the server starts right away? If it knows the entry is chosen, it sends
@@ -21,18 +18,18 @@ Q: If there is a prepare request coming from a server that the local server beli
 	leader, is it safe to ignore the request?
 A: It's okay and required. 
    Suppose a server B lost connection to the leader A, then it think it's the leader and 
- 	 proceed to do prepare. Other servers still have the connection to the leader A, if they
- 	 do not reject the request, leader B's prepare requests will go through, and then leader A's
- 	 request will come right afterwards. This is livelock situation we want to solve in the first
-	 place, so we need to turn down requests coming from leaders that is not considered to be
-	 the leader.
+   proceed to do prepare. Other servers still have the connection to the leader A, if they
+   do not reject the request, leader B's prepare requests will go through, and then leader A's
+   request will come right afterwards. This is livelock situation we want to solve in the first
+   place, so we need to turn down requests coming from leaders that is not considered to be
+   the leader.
 
 Q: If there is an Accept request coming from a server that the local server belives is not the
 	 leader, is it safe to ignore the request?
 A: It's okay and required.
    There are two types of accept requests, one is to replicate the chosen entries. Another one
-	 is to ask other servers to accept. 
-	 Let's fisrt analyze the first type of Accept. It's better to not turn down the accept because
+   is to ask other servers to accept. 
+   Let's fisrt analyze the first type of Accept. It's better to not turn down the accept because
    since it's chosen, its proposal number will be +INFINITY, and its value can definitely
    be used. But what if we turn it down? Will the new leader send the same accept? Yes. But the
    new leader may not know the value is chosen, then it will do a two-phase commit. Only after
