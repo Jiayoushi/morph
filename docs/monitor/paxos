@@ -15,7 +15,7 @@ A: It's okay.
    accpeted so he will use that value instead. And finally the value will be chosen again.
 
 Q: If there is a prepare request coming from a server that the local server belives is not the 
-	leader, is it safe to ignore the request?
+   leader, is it safe to ignore the request?
 A: It's okay and required. 
    Suppose a server B lost connection to the leader A, then it think it's the leader and 
    proceed to do prepare. Other servers still have the connection to the leader A, if they
@@ -25,7 +25,7 @@ A: It's okay and required.
    the leader.
 
 Q: If there is an Accept request coming from a server that the local server belives is not the
-	 leader, is it safe to ignore the request?
+   leader, is it safe to ignore the request?
 A: It's okay and required.
    There are two types of accept requests, one is to replicate the chosen entries. Another one
    is to ask other servers to accept. 
