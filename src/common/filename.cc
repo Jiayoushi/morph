@@ -25,6 +25,10 @@ std::string log_file_name(const std::string &name, uint64_t number) {
   return make_file_name(name, number, "log");
 }
 
+std::string paxos_file_name(const std::string &name) {
+  return make_file_name(name, "paxos");
+}
+
 std::string logger_file_name(const std::string &name) {
   return make_file_name(name, "logger");
 }

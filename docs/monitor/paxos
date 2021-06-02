@@ -1,0 +1,47 @@
+Replication:
+   Keep sending Accept RPC until leader and other servers have identical first_unchosen_index.
+
+Notes:
+  
+
+Q: When should a server starts sending out Accept to replicate chosen entries if it thinks
+   it's the leader?
+A: What happens if the server starts right away? If it knows the entry is chosen, it sends
+   out Accept. And everything goes well. Even if an entry is previously chosen, and this
+   server does not know, it's okay. Since it will do a two-phase only to chosen the same
+   value again. If it does not, what is it waiting for? 
+
+Q: What if leader A is the only one that knows an entry has been chosen and now is down?
+A: It's okay.
+   The leader B comes along and try to prepare another value. Suppose it does not know the
+   value before, it will try to issue its own value. It will discover a value has already been
+   accpeted so he will use that value instead. And finally the value will be chosen again.
+
+Q: If there is a prepare request coming from a server that the local server belives is not the 
+	leader, is it safe to ignore the request?
+A: It's okay and required. 
+   Suppose a server B lost connection to the leader A, then it think it's the leader and 
+ 	 proceed to do prepare. Other servers still have the connection to the leader A, if they
+ 	 do not reject the request, leader B's prepare requests will go through, and then leader A's
+ 	 request will come right afterwards. This is livelock situation we want to solve in the first
+	 place, so we need to turn down requests coming from leaders that is not considered to be
+	 the leader.
+
+Q: If there is an Accept request coming from a server that the local server belives is not the
+	 leader, is it safe to ignore the request?
+A: It's okay and required.
+   There are two types of accept requests, one is to replicate the chosen entries. Another one
+	 is to ask other servers to accept. 
+	 Let's fisrt analyze the first type of Accept. It's better to not turn down the accept because
+   since it's chosen, its proposal number will be +INFINITY, and its value can definitely
+   be used. But what if we turn it down? Will the new leader send the same accept? Yes. But the
+   new leader may not know the value is chosen, then it will do a two-phase commit. Only after
+   the two-phase completes will the same accept ever be sent again. So it's again better to not
+   turn down the request.
+   Let's now analyze the second type of Accept. If we receive an accept from a server A that we
+   do not think is the leader, we should just turn it down. If we think server D is the leader,
+   and we have a (A, B, C) (D, E) network partition. It's okay for D, E to turn down the Accept,
+   since ABC will still form a quorum. If network is good other than A lose connection to D,
+   it's still okay to turn down. It's always safe to turn down. What if we let the Accept through? 
+   It's okay. It will only be a problem if leader D now issue a prepare request to change the
+   value of min_proposal. Then livelock may arise. So we need to turn it down!

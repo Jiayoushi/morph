@@ -79,42 +79,28 @@ grpc::Status MonitorServiceImpl::add_oss(ServerContext *context,
   Info info(request->info().name(), request->info().addr());
   grpc::Status status;
 
-  std::shared_ptr<MonitorInstance> leader = paxos_service->get_leader();
 
+  std::shared_ptr<MonitorInstance> leader = paxos_service->get_leader();
   logger->info(fmt::sprintf("add_oss: leader[%s] name[%s] addr[%s]",
     leader->info.name.c_str(), info.name.c_str(), info.addr.c_str()));
 
-  if (leader->info.name != this_name) {
-    ret_val = S_NOT_LEADER;
+  // TODO: you simply cannot redirect right now. Because it's possible the leader
+  //       is handling add_oss and is requesting this monitor to handle prepare
+  //       which leads to deadlock.
+  //status = redirect_add_oss(paxos_service->get_leader(), request, reply);
+
+  uint64_t log_index;
+  oss_cluster_manager.add_instance(info, &serialized);
+  ret_val = paxos_service->run(serialized, &log_index); 
+  if (ret_val == S_SUCCESS) {
+    oss_cluster_manager.update(log_index + 1);
+  } else {
+    oss_cluster_manager.remove_instance(info, nullptr);
+  }
+
+  if (ret_val == S_NOT_LEADER) {
     reply->set_leader_name(leader->info.name);
     reply->set_leader_addr(leader->info.addr);
-    // TODO: you simply cannot redirect right now. Because it's possible the leader
-    //       is handling add_oss and is requesting this monitor to handle prepare
-    //       which leads to deadlock.
-    //status = redirect_add_oss(paxos_service->get_leader(), request, reply);
-  } else {
-    ret_val = oss_cluster_manager.add_instance(info, &serialized);
-  
-    // Use paxos to replicate the log and then answer to the client
-    if (ret_val == S_SUCCESS) {
-      uint64_t log_index;
-  
-      bool chosen = false;
-      while (!chosen) {
-        leader = paxos_service->get_leader();
-        if (leader->info.name != this_name) {
-          ret_val = S_NOT_LEADER;
-          reply->set_leader_name(leader->info.name);
-          reply->set_leader_addr(leader->info.addr);
-          break;
-        }
-        chosen = paxos_service->run(serialized, &log_index);
-      }
-
-      if (chosen) {
-        oss_cluster_manager.update(log_index + 1);
-      }
-    }
   }
 
   reply->set_ret_val(ret_val);
@@ -167,19 +153,17 @@ grpc::Status MonitorServiceImpl::add_mds(ServerContext *context,
 grpc::Status MonitorServiceImpl::prepare(ServerContext *context, 
                                        const PrepareRequest *request,
                                        PrepareReply *reply)  {
-  uint64_t accepted_proposal;
+  uint64_t accepted_proposal = 0;
   std::string accepted_value;
   int ret_val = S_SUCCESS;
 
   logger->info(fmt::sprintf("prepare: log_index[%d] proposal[%s]",
     request->log_index(), uint64_two(request->proposal())));
 
-  if (paxos_service->is_leader(request->proposer())) {
-    paxos_service->prepare_handler(request->log_index(), request->proposal(), 
-                                   &accepted_proposal, &accepted_value);
-  } else {
-    ret_val = S_NOT_LEADER;
-  }
+  ret_val = paxos_service->prepare_handler(request->proposer(),
+                                           request->log_index(), 
+                                           request->proposal(), 
+                                           &accepted_proposal, &accepted_value);
 
   // TODO: If you log more information, it can lead to huge slowdown
   //       for reasons unknown.
@@ -196,59 +180,70 @@ grpc::Status MonitorServiceImpl::accept(ServerContext *context,
                                       const AcceptRequest* request,
                                       AcceptReply *reply) {
   uint64_t min_proposal;
+  uint64_t first_unchosen_index;
   int ret_val = S_SUCCESS;
 
   logger->info(fmt::sprintf(
-    "accept request received: index[%d] proposal[%s] value[%s]",
-    request->log_index(), uint64_two(request->proposal()), request->value()
+    "accept request received: index[%d] first_unchosen[%lu] proposal[%s] value[%s]",
+    request->log_index(), request->first_unchosen_index(), 
+    uint64_two(request->proposal()), request->value()
   ));
 
-  if (paxos_service->is_leader(request->proposer())) {
-    paxos_service->accept_handler(request->log_index(), request->proposal(),
-                                  request->value(), &min_proposal);
-  } else {
-    ret_val = S_NOT_LEADER;
-  }
+  ret_val = paxos_service->accept_handler(request->proposer(),
+                                          request->log_index(), 
+                                          request->first_unchosen_index(), 
+                                          request->proposal(), 
+                                          request->value(),
+                                          &min_proposal,
+                                          &first_unchosen_index);
 
-   logger->info(fmt::sprintf(
-    "accept request received: index[%d] proposal[%s] value[%s]. Return ret",
-    request->log_index(), uint64_two(request->proposal()), request->value(), ret_val
+  logger->info(fmt::sprintf(
+    "accept request received: index[%d] first_unchosen[%lu] proposal[%s]"
+    " value[%s]. Return ret [%d]",
+    request->log_index(), request->first_unchosen_index(),
+    uint64_two(request->proposal()), request->value(), ret_val
   ));
 
+  reply->set_first_unchosen_index(first_unchosen_index);
   reply->set_ret_val(ret_val);
   reply->set_min_proposal(min_proposal);
   return grpc::Status::OK;
 }
 
-grpc::Status MonitorServiceImpl::commit(ServerContext *context,
-                                        const CommitRequest *request,
-                                        CommitReply *reply) {
+grpc::Status MonitorServiceImpl::success(ServerContext *context,
+                                        const SuccessRequest *request,
+                                        SuccessReply *reply) {
   uint32_t log_index;
   std::string value;
   uint64_t current_version;
   uint64_t new_version;
 
   logger->info(fmt::sprintf(
-    "commit request received: index[%d] proposal[%s]",
-    request->log_index(), uint64_two(request->proposal())
-  ));
+    "success request received: index[%d] value[%s]",
+    request->log_index(), request->value())
+  );
 
-  paxos_service->commit_handler(request->log_index(), request->proposal());
+  paxos_service->success_handler(request->log_index(), 
+                                 request->value());
 
+
+  // Skips any intermediate cluster changes, and directly update to the latest
   paxos_service->get_last_chosen_log(&log_index, &value);
   oss_cluster_manager.get_current(&current_version, nullptr);
   new_version = log_index + 1;
-
   if (new_version > current_version) {
     oss_cluster_manager.update_to(log_index + 1, value);
   }
 
+  uint32_t first = paxos_service->get_first_unchosen_index();
+
   logger->info(fmt::sprintf(
-    "commit request received: index[%d] proposal[%s]. Old version[%lu], New version[%lu]\n",
-    request->log_index(), uint64_two(request->proposal()), current_version, new_version
+    "success request processed: index[%d] proposal[%s]. Old version[%lu], "
+    " New version[%lu]. Return first_unchosen[%lu]",
+    request->log_index(), request->value(), current_version, new_version, first
   ));
 
-  reply->set_ret_val(S_SUCCESS);
+  reply->set_first_unchosen_index(first);
   return grpc::Status::OK;
 }
 
@@ -258,7 +253,7 @@ grpc::Status MonitorServiceImpl::heartbeat(ServerContext *context,
   auto instance = monitor_cluster->get_instance(request->server_name());
   assert(instance != nullptr);
 
-  logger->info(fmt::sprintf("heartbeat: %s is kept alive", instance->info.name.c_str()));
+  logger->info(fmt::sprintf("heartbeat: %s is still alive", instance->info.name.c_str()));
 
   instance->set_heartbeat_to_now();
 
@@ -290,15 +285,15 @@ grpc::Status MonitorServiceImpl::get_logs(ServerContext *context,
                                           const GetLogsRequest *request,
                                           GetLogsReply *reply) {
 
-  logger->info("get_logs invoked\n");
+  logger->info("get_logs invoked");
 
   std::string buf;
 
   paxos_service->get_serialized_logs(&buf);
   reply->set_logs(buf);
 
-  logger->info("get_logs returend [%s].\n",
-    buf.c_str());
+  logger->info(fmt::sprintf("get_logs returend [%s]",
+    buf.c_str()));
 
   return grpc::Status::OK;
 }
@@ -427,7 +422,7 @@ void MonitorServiceImpl::heartbeat_routine() {
 
     for (auto p = monitor_cluster->cluster_map.begin();
        p != monitor_cluster->cluster_map.end();
-       ++p) {   
+       ++p) {
 
       if (!p->second->is_alive(paxos::HEARTBEAT_TIMEOUT_INTERVAL)) {
         logger->info(fmt::sprintf("[%s] seems to be dead. diff[%f]", 

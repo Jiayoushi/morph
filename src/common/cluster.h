@@ -27,7 +27,9 @@ enum ClusterErrorCode {
   // The format of server network address is not correct
   S_ADDR_INVALID = 5,
 
-  S_NOT_LEADER = 6
+  S_NOT_LEADER = 6,
+
+  S_FAILURE = 7
 };
 
 // No lock needed. The synchronization of cluster change is provided by 

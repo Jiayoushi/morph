@@ -36,7 +36,7 @@ class PosixSequentialFile final: public SequentialFile {
   Status read(size_t n, Slice *result, char *scratch) override {
     Status status;
     while (true) {
-      ::size_t read_size = ::read(fd, scratch, n);
+      ::ssize_t read_size = ::read(fd, scratch, n);
       if (read_size < 0) {
         if (errno == EINTR) {
           continue;

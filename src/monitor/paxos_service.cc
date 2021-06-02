@@ -11,81 +11,120 @@ PaxosService::PaxosService(const std::string &this_name,
                            std::shared_ptr<MonitorCluster> monitor_cluster):
     this_name(this_name), running(true),
     monitor_cluster(monitor_cluster) {
-  assert(monitor_cluster->size() % 2 == 1);  // Need odd number of paxos instance
+  // Need odd number of paxos instance
+  assert(monitor_cluster->size() % 2 == 1);
 
   logger = init_logger(this_name);
   assert(logger != nullptr);
 
   paxos = std::make_unique<Paxos>(this_name);
 
-  heartbeat_thread = std::make_unique<std::thread>(
-    &PaxosService::broadcast_heartbeat_routine, this);
+  sync_cbs.reserve(monitor_cluster->size() - 1);
+  for (auto p = monitor_cluster->cluster_map.begin();
+        p != monitor_cluster->cluster_map.end();
+        ++p) {
+    if (!p->second->is_local()) {
+      sync_cbs[p->second->info.name] = new SyncControlBlock(p->second, this);
+    }
+  }
 }
 
 PaxosService::~PaxosService() {
   running = false;
-  heartbeat_thread->join();
+
+  for (auto p = sync_cbs.begin(); p != sync_cbs.end(); ++p) {
+    delete p->second;
+  }
 }
 
-void PaxosService::accept_handler(const uint32_t log_index,
+int PaxosService::prepare_handler(const std::string &proposer,
+                                  const uint32_t log_index, 
                                   const uint64_t proposal, 
-                                  const std::string &value,
-                                  uint64_t *min_proposal) {
-  paxos->accept_handler(log_index, proposal, value, min_proposal);
-}
-
-void PaxosService::prepare_handler(const uint32_t log_index, 
-                                   const uint64_t proposal, 
-                                   uint64_t *out_accepted_proposal, 
-                                   std::string *accepted_value) {
+                                  uint64_t *out_accepted_proposal, 
+                                  std::string *accepted_value) {
+  if (!is_leader(proposer)) {
+    return S_NOT_LEADER;
+  }
   paxos->prepare_handler(log_index, proposal, out_accepted_proposal, 
                          accepted_value);
+  return S_SUCCESS;
 }
 
-void PaxosService::commit_handler(const uint32_t log_index,
-                                  const uint64_t proposal) {
-  paxos->commit_handler(log_index, proposal);
+int PaxosService::accept_handler(const std::string &proposer,
+                                  const uint32_t log_index,
+                                  const uint32_t first_unchosen,
+                                  const uint64_t proposal,
+                                  const std::string &value,
+                                  uint64_t *min_proposal,
+                                  uint64_t *first_unchosen_index) {
+  set_instance_first_unchosen_index(proposer, first_unchosen);
+  if (!is_leader(proposer)) {
+    return S_NOT_LEADER;
+  }
+  paxos->accept_handler(log_index, first_unchosen, proposal, value, 
+                        min_proposal);
+  return S_SUCCESS;
 }
 
+void PaxosService::success_handler(const uint32_t log_index,
+                                   const std::string &value) {
+  paxos->success_handler(log_index, value);
+}
 
-bool PaxosService::run(const std::string &value, uint64_t *log_index) {
+int PaxosService::run(const std::string &value, uint64_t *log_index) {
+  int ret;
+  for (int i = 0; i < 2; ++i) {
+    ret = run_one_round(value, log_index);
+    if (ret == S_SUCCESS) {
+      return ret;
+    }
+  }
+  return ret;
+}
+
+int PaxosService::run_one_round(const std::string &value, 
+                                uint64_t *log_index) {
+  if (!is_leader(this_name)) {
+    return S_NOT_LEADER;
+  }
+
   Log *log = paxos->get_unchosen_log();
-  uint64_t proposal = paxos->choose_new_proposal_number(log);
+  uint64_t proposal = paxos->choose_new_proposal_number();
 
-  if (log->state == VALUE_ACCEPTED) {
+  if (paxos->has_accepted_proposal(log)) {
     assert(false && "NOT YET IMPLEMENTED");
   }
 
-  log->set_accepted(proposal, value);
-
   // Phase-1
-  std::unique_ptr<PvPair> pair = broadcast_prepare(log->get_log_index(), proposal);
-
+  std::unique_ptr<PvPair> pair;
+  pair = broadcast_prepare(paxos->get_log_index(log), 
+                           proposal);
   if (!is_leader(this_name)) {
-    return false;
+    return S_NOT_LEADER;
   }
 
   // Phase-2
-  const std::string *value_to_send = nullptr;
+  const std::string *value_to_accept = nullptr;
   if (pair->accepted_proposal == 0) {
-    value_to_send = &value;
+    value_to_accept = &value;
   } else {
-    log->set_accepted(pair->accepted_proposal, pair->accepted_value);
-    value_to_send = &pair->accepted_value;
+    value_to_accept = &pair->accepted_value;
   }
+  paxos->set_accepted(log, proposal, *value_to_accept);
 
-  bool chosen = broadcast_accept(log->get_log_index(), 
-                                 proposal, *value_to_send);
+  bool chosen = broadcast_accept(paxos->get_log_index(log), 
+                                 paxos->get_first_unchosen_index(),
+                                 proposal, *value_to_accept);
   if (chosen) {
-    log->set_chosen();
-    *log_index = log->get_log_index();
+    paxos->set_chosen(log, nullptr);
+    *log_index = paxos->get_log_index(log);
+    return S_SUCCESS;
   } else {
-    log->reset();
+    paxos->reset(log);
+    return S_FAILURE;
   }
-
-  broadcast_commit(log->get_log_index(), proposal);
-  return chosen;
 }
+
 
 std::unique_ptr<PvPair> PaxosService::broadcast_prepare(
                                            const uint32_t log_index,
@@ -127,6 +166,7 @@ std::unique_ptr<PvPair> PaxosService::broadcast_prepare(
 }
 
 bool PaxosService::broadcast_accept(const uint32_t log_index,
+                                    const uint32_t first_unchosen_index,
                                     const uint64_t proposal, 
                                     const std::string &value) {
   std::atomic<int> response_count(0);
@@ -143,10 +183,10 @@ bool PaxosService::broadcast_accept(const uint32_t log_index,
       continue;
     }
 
-    auto x = [this, instance, log_index, proposal, &value, 
-              &response_count, target_count] {
-      return send_accept(instance, log_index, proposal, value, 
-                         &response_count, target_count);
+    auto x = [this, instance, log_index, first_unchosen_index, proposal, 
+              &value, &response_count, target_count] {
+      return send_accept_until(instance, log_index, first_unchosen_index,
+                         proposal, value, &response_count, target_count);
     };
     auto f = std::async(std::launch::async, x);
     futures.push_back(std::move(f));
@@ -169,54 +209,28 @@ bool PaxosService::broadcast_accept(const uint32_t log_index,
   return true;
 }
 
-
-void PaxosService::broadcast_commit(const uint32_t log_index,
-                                    const uint64_t proposal) {
-  auto &cluster_map = monitor_cluster->cluster_map;
-
-  std::list<std::future<void>> futures;
-  for (auto p = cluster_map.begin(); p != cluster_map.end(); ++p) {
-    auto instance = p->second;
-    if (instance->info.name == this_name) {
-      continue;
-    }
-
-    auto x = [this, instance, log_index, proposal] {
-      return send_commit(instance, log_index, proposal);
-    };
-    auto f = std::async(std::launch::async, x);
-    futures.push_back(std::move(f));
-  }
-
-  for (auto &future: futures) {
-    future.wait();
-  }
-}
-
-void PaxosService::broadcast_heartbeat_routine() {
-  // TODO: implement this
-}
-
 std::unique_ptr<PvPair> PaxosService::send_prepare(
           std::shared_ptr<MonitorInstance> instance, const uint32_t log_index,
           const uint64_t proposal, std::atomic<int> *response_count, 
           const int target_count) {
+  monitor_rpc::PrepareRequest request;
+  request.set_proposal(proposal);
+  request.set_log_index(log_index);
+  request.set_proposer(this_name);
+
   while (response_count->load() < target_count) {
     grpc::ClientContext ctx;
-    monitor_rpc::PrepareRequest request;
     monitor_rpc::PrepareReply reply;
 
     std::chrono::system_clock::time_point deadline = 
       std::chrono::system_clock::now() + std::chrono::milliseconds(1000);
     ctx.set_deadline(deadline);
-    request.set_proposal(proposal);
-    request.set_log_index(log_index);
-    request.set_proposer(this_name);
 
-    logger->info(fmt::sprintf("send_prepare to [%s]: log_index[%d] proposal[%s] target_count[%d]",
+    logger->info(fmt::sprintf(
+      "send_prepare to [%s]: log_index[%d] proposal[%s] target_count[%d]",
       instance->info.name.c_str(), log_index, uint64_two(proposal), target_count));
 
-    auto s = instance->stub->prepare(&ctx, request, &reply);
+    grpc::Status s = instance->stub->prepare(&ctx, request, &reply);
 
     logger->info(fmt::sprintf(
       "send_prepare [%s]: log_index[%d] proposal[%s] target_count[%d]."
@@ -229,6 +243,7 @@ std::unique_ptr<PvPair> PaxosService::send_prepare(
       std::this_thread::sleep_for(std::chrono::milliseconds(500));
       continue;
     }
+
     if (reply.ret_val() == S_NOT_LEADER) {
       std::this_thread::sleep_for(std::chrono::milliseconds(500));
       if (!is_leader(this_name)) {
@@ -240,7 +255,6 @@ std::unique_ptr<PvPair> PaxosService::send_prepare(
 
     ++(*response_count);
     assert(reply.ret_val() == S_SUCCESS);
-    
 
     uint64_t v = reply.accepted_proposal();
     const std::string &val = reply.accepted_value();
@@ -250,38 +264,45 @@ std::unique_ptr<PvPair> PaxosService::send_prepare(
   return std::make_unique<PvPair>(INVALID_PROPOSAL, "");
 }
 
-std::unique_ptr<uint64_t> PaxosService::send_accept(
+std::unique_ptr<uint64_t> PaxosService::send_accept_until(
            std::shared_ptr<MonitorInstance> instance, 
-           const uint32_t log_index, const uint64_t proposal,
+           const uint32_t log_index, 
+           const uint32_t first_unchosen_index,
+           const uint64_t proposal,
            const std::string &value, std::atomic<int> *response_count, 
            const int target_count) {
+  monitor_rpc::AcceptRequest request;
+  std::chrono::system_clock::time_point deadline = 
+    std::chrono::system_clock::now() + std::chrono::milliseconds(1000);
+  request.set_log_index(log_index);
+  request.set_proposal(proposal);
+  request.set_value(value);
+  request.set_proposer(this_name);
+  request.set_first_unchosen_index(first_unchosen_index);
+
   while (response_count->load() < target_count) {
     grpc::ClientContext ctx;
-    monitor_rpc::AcceptRequest request;
     monitor_rpc::AcceptReply reply;
 
-    std::chrono::system_clock::time_point deadline = 
-      std::chrono::system_clock::now() + std::chrono::milliseconds(1000);
     ctx.set_deadline(deadline);
-    request.set_log_index(log_index);
-    request.set_proposal(proposal);
-    request.set_value(value);
-    request.set_proposer(this_name);
 
     logger->info(fmt::sprintf(
-      "send accept index[%d] proposal[%s] value[%s] to monitor[%s]",
-      log_index, uint64_two(proposal), value.c_str(), instance->info.name.c_str()
+      "[ACCEPT] request to monitor[%s] index[%d] first_unchosen[%lu] proposal[%s] value[%s]",
+      instance->info.name.c_str(), log_index, first_unchosen_index, uint64_two(proposal), value.c_str()
     ));
 
     auto s = instance->stub->accept(&ctx, request, &reply);
+
     if (!s.ok()) {
       std::this_thread::sleep_for(std::chrono::milliseconds(500));
       continue;
     }
 
     logger->info(fmt::sprintf(
-      "send accept index[%d] proposal[%s] to monitor[%s]. Result: rpc[%d], ret[%d]",
-      log_index, uint64_two(proposal), instance->info.name, s.error_code(), reply.ret_val()
+      "[ACCEPT] reply from monitor[%s] index[%d] first_unchosen[%lu] proposal[%s]. "
+      " Result: rpc[%d], ret[%d], first_unchosen[%lu]",
+      instance->info.name, log_index, first_unchosen_index, uint64_two(proposal), 
+      s.error_code(), reply.ret_val(), reply.first_unchosen_index()
     ));
 
     if (reply.ret_val() == S_NOT_LEADER) {
@@ -293,6 +314,9 @@ std::unique_ptr<uint64_t> PaxosService::send_accept(
       continue;
     }
 
+    set_instance_first_unchosen_index(instance->info.name, 
+                                      reply.first_unchosen_index());
+
     ++(*response_count);
     assert(reply.ret_val() == S_SUCCESS);
 
@@ -302,34 +326,79 @@ std::unique_ptr<uint64_t> PaxosService::send_accept(
   return std::make_unique<uint64_t>(0);
 }
 
-void PaxosService::send_commit(std::shared_ptr<MonitorInstance> instance, 
-                               const uint32_t log_index,
-                               const uint64_t proposal) {
-  grpc::ClientContext ctx;
-  monitor_rpc::CommitRequest request;
-  monitor_rpc::CommitReply reply;
-
-  logger->info(fmt::sprintf(
-    "send commit index[%d] proposal[%s] to monitor[%s]",
-    log_index, uint64_two(proposal), instance->info.name
-  ));
-
-  std::chrono::system_clock::time_point deadline = 
-    std::chrono::system_clock::now() + std::chrono::milliseconds(1000);
-  ctx.set_deadline(deadline);
+void PaxosService::send_success(
+           std::shared_ptr<MonitorInstance> instance, 
+           const uint32_t log_index, 
+           const uint32_t first_unchosen_index,
+           const uint64_t proposal,
+           const std::string &value) {
+  monitor_rpc::SuccessRequest request;
   request.set_log_index(log_index);
-  request.set_proposal(proposal);
+  request.set_value(value);
 
-  auto s = instance->stub->commit(&ctx, request, &reply);
+  while (running) {
+    grpc::ClientContext ctx;
+    monitor_rpc::SuccessReply reply;
 
-  logger->info(fmt::sprintf(
-    "send commit index[%d] proposal[%s] to monitor[%s]. Result: rpc[%d], ret[%d]",
-    log_index, uint64_two(proposal), instance->info.name,  s.error_code(), reply.ret_val()
-  ));
+    std::chrono::system_clock::time_point deadline = 
+      std::chrono::system_clock::now() + std::chrono::milliseconds(1000);
+    ctx.set_deadline(deadline);
 
-  if (!s.ok()) {
-    // TODO: ?
-    return;
+    uint64_t remote_fu = get_instance_first_unchosen_index(instance->info.name);
+
+    logger->info(fmt::sprintf(
+      "[SUCCESS] request to monitor[%s] fu[%lu]: index[%d] first_unchosen[%lu] proposal[%s] value[%s]",
+      instance->info.name.c_str(), remote_fu, log_index, first_unchosen_index, 
+      uint64_two(proposal), value.c_str()
+    ));
+
+    auto status = instance->stub->success(&ctx, request, &reply);
+
+    logger->info(fmt::sprintf(
+      "[SUCCESS] reply from monitor[%s] fu[%lu]. index[%d] first_unchosen[%lu] proposal[%s] "
+      " Result: rpc[%d], first_unchosen[%lu]",
+      instance->info.name, remote_fu, log_index, first_unchosen_index, uint64_two(proposal), 
+      status.error_code(), reply.first_unchosen_index()
+    ));
+
+    if (!status.ok()) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(500));
+      continue;
+    }
+
+    set_instance_first_unchosen_index(instance->info.name, reply.first_unchosen_index());
+    break;
+  }
+}
+
+void PaxosService::sync_routine(PaxosService::SyncControlBlock *scb) {
+  while (running) {
+    while (running && is_leader(this_name) && scb->need_sync()) {
+      uint32_t log_index = scb->get_first_unchosen_index();
+      uint64_t log_proposal;
+      std::string log_value;
+
+      paxos->get_log(log_index, &log_proposal, &log_value);
+
+      if (log_proposal != CHOSEN_PROPOSAL) {
+        logger->info(fmt::sprintf("ERROR: log_proposal [%llu] != CHOSEN_PROPOSAL\n",
+          log_proposal));
+        assert(false);
+      }
+
+      send_success(scb->instance, log_index, 
+                   paxos->get_first_unchosen_index(),
+                   log_proposal, log_value);
+    }
+
+    std::unique_lock<std::mutex> lock(scb->mutex);
+
+    while (running) {
+      scb->state_changed.wait_for(lock, std::chrono::milliseconds(200));
+      if (paxos->get_first_unchosen_index() > scb->first_unchosen_index) {
+        break;
+      }
+    };
   }
 }
 
@@ -367,9 +436,11 @@ void PaxosService::get_last_chosen_log(uint32_t *log_index, std::string *value) 
 //       how to prevent race condition?
 //       one way is to lock each log, and serialize logs one by one
 void PaxosService::get_serialized_logs(std::string *buf) const {
-  std::stringstream ss;
-  clmdep_msgpack::pack(ss, *paxos);
-  *buf = std::move(ss.str());
+  paxos->get_logs(buf);
+}
+
+uint32_t PaxosService::get_first_unchosen_index() const {
+  return paxos->get_first_unchosen_index();
 }
 
 

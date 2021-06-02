@@ -53,9 +53,9 @@ class MonitorServiceImpl final: public monitor_rpc::MonitorService::Service {
                       const AcceptRequest *request, 
                       AcceptReply *reply) override;
   
-  grpc::Status commit(ServerContext *context,
-                      const CommitRequest *request,
-                      CommitReply *reply) override;
+  grpc::Status success(ServerContext *context,
+                      const SuccessRequest *request,
+                      SuccessReply *reply) override;
 
   grpc::Status heartbeat(ServerContext *context, 
                          const HeartbeatRequest* request, 

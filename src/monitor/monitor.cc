@@ -33,7 +33,7 @@ Monitor::Monitor(const Config &config):
 }
 
 Monitor::~Monitor() {
-  logger->debug("monitor destructor called.");
+  logger->debug("monitor destructor invoked.");
 }
 
 } // namespace monitor

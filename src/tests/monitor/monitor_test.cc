@@ -230,6 +230,7 @@ class ClusterTester {
 
   bool check_consensus(const int target) {
     std::unordered_map<std::string, int> m;
+    std::hash<std::string> hash_func;
 
     for (auto x = instances.begin(); x != instances.end(); ++x) {
       auto stub = x->second->stub;
@@ -243,6 +244,7 @@ class ClusterTester {
         continue;
       }
 
+      std::cerr << x->second->info.name.c_str() << ": " << hash_func(reply.logs()) << std::endl;
       ++m[reply.logs()];
     }
 
@@ -306,19 +308,22 @@ TEST(Monitor, FaultTolerant) {
  
   fprintf(stderr, "test majority consensus when network is okay\n");
   tester.add_oss();
+  std::this_thread::sleep_for(std::chrono::milliseconds(500));
   ASSERT_TRUE(tester.majority_consensus_reached());
 
   tester.add_oss();
+  std::this_thread::sleep_for(std::chrono::milliseconds(500));
   ASSERT_TRUE(tester.majority_consensus_reached());
-  fprintf(stderr, "passed\n");
+  fprintf(stderr, "passed\n\n");
 
   tester.shutdown(0);
   tester.shutdown(1);
 
   fprintf(stderr, "test majority consensus when two nodes down\n");
   tester.add_oss();
+  std::this_thread::sleep_for(std::chrono::milliseconds(500));
   ASSERT_TRUE(tester.majority_consensus_reached());
-  fprintf(stderr, "passed\n");
+  fprintf(stderr, "passed\n\n");
 
   fprintf(stderr, "test consensus when nodes restart\n");
   tester.restart(0);
@@ -326,21 +331,22 @@ TEST(Monitor, FaultTolerant) {
 
   tester.restart(1);
   tester.add_oss();
-  std::this_thread::sleep_for(std::chrono::seconds(1));
+  std::this_thread::sleep_for(std::chrono::seconds(2));
   ASSERT_TRUE(tester.consensus_reached());
-  fprintf(stderr, "passed\n");
+  fprintf(stderr, "passed\n\n");
 
   fprintf(stderr, "test majority consensus after leader node is down\n");
   tester.shutdown(4);
   tester.add_oss();
+  std::this_thread::sleep_for(std::chrono::seconds(1));
   ASSERT_TRUE(tester.majority_consensus_reached());
-  fprintf(stderr, "passed\n");
+  fprintf(stderr, "passed\n\n");
 
   fprintf(stderr, "test consensus after leader node is restarted\n");
   tester.restart(4);
   std::this_thread::sleep_for(std::chrono::seconds(1));
   ASSERT_TRUE(tester.consensus_reached());
-  fprintf(stderr, "passed\n");
+  fprintf(stderr, "passed\n\n");
 }
 
 /* TODO:

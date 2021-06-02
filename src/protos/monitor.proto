@@ -11,7 +11,7 @@ service MonitorService {
 
   rpc prepare (PrepareRequest) returns (PrepareReply) {};
   rpc accept (AcceptRequest) returns (AcceptReply) {};
-  rpc commit (CommitRequest) returns (CommitReply) {};
+  rpc success (SuccessRequest) returns (SuccessReply) {};
   rpc get_logs (GetLogsRequest) returns (GetLogsReply) {};
   rpc heartbeat (HeartbeatRequest) returns (HeartbeatReply) {};
 }
@@ -79,23 +79,25 @@ message PrepareReply {
 
 message AcceptRequest {
   uint32 log_index = 1;
-  uint64 proposal = 2;
-  string proposer = 3;
-  bytes value = 4;
+  uint32 first_unchosen_index = 2;
+  uint64 proposal = 3;
+  string proposer = 4;
+  bytes value = 5;
 }
 
 message AcceptReply {
   uint32 ret_val = 1;
-  uint64 min_proposal = 2;
+  uint32 first_unchosen_index = 2;
+  uint64 min_proposal = 3;
 }
 
-message CommitRequest {
+message SuccessRequest {
   uint32 log_index = 1;
-  uint64 proposal = 2;
+  bytes value = 2;
 }
 
-message CommitReply {
-  uint32 ret_val = 1;
+message SuccessReply {
+  uint32 first_unchosen_index = 1;
 }
 
 message HeartbeatRequest {
