@@ -46,10 +46,12 @@ void KvStore::init_db(const bool recovery) {
   std::vector<ColumnFamilyDescriptor> column_families;
 
   options.IncreaseParallelism();
-  options.OptimizeLevelStyleCompaction();
+  options.OptimizeUniversalStyleCompaction();
   options.create_if_missing = true;
   options.wal_dir = kv_wal_file_name(name);
   options.manual_wal_flush = true;
+  options.recycle_log_file_num = 4;
+  options.compaction_style = kCompactionStyleUniversal;
 
   const std::string kv_name = kv_db_file_name(name);
   if (recovery) {

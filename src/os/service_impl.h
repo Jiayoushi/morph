@@ -4,7 +4,7 @@
 #include <proto_out/oss.grpc.pb.h>
 #include <proto_out/monitor.grpc.pb.h>
 
-#include "monitor/config.h"
+#include "common/config.h"
 #include "common/cluster.h"
 #include "common/logger.h"
 #include "object_store.h"
@@ -25,7 +25,7 @@ class ObjectStoreServiceImpl final: public GrpcOssService {
  public:
   explicit ObjectStoreServiceImpl(const std::string &name,
                                   const NetworkAddress &addr,
-                                  const monitor::Config &monitor_config,
+                                  const Config &monitor_config,
                                   const ObjectStoreOptions &opts);
 
   ~ObjectStoreServiceImpl();

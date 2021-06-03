@@ -1,0 +1,7 @@
+There is only one transaction active at any time, the log_handle of the current transaction is
+distributed. Each operation will copy the modified stuff into the writebatch of the log_handle.
+
+Problems:
+  If there are 1000 writes to the same block, current implementation will copy the same block to 
+  the writebatch of a log_handle 1000 times. If we only include the buffer in the log_handle
+  then it will only be 1 copy to the writebatch.

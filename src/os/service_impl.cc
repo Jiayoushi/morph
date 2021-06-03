@@ -1,6 +1,6 @@
 #include "service_impl.h"
 
-#include "monitor/config.h"
+#include "common/config.h"
 #include "common/consistent_hash.h"
 #include "error_code.h"
 
@@ -12,7 +12,7 @@ namespace os {
 ObjectStoreServiceImpl::ObjectStoreServiceImpl(
       const std::string &name,
       const NetworkAddress &addr,
-      const monitor::Config &monitor_config,
+      const Config &monitor_config,
       const ObjectStoreOptions &opts):
     this_name(name),
     this_addr(addr),
