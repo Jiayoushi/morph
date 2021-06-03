@@ -18,21 +18,13 @@ class Paxos;
 
 struct Log {
   Log():
-    log_index(0),
     accepted_proposal(INVALID_PROPOSAL), 
     accepted_value() {}
-
-  Log(const uint32_t log_index):
-      Log() {
-    this->log_index = log_index;
-  }
 
   MSGPACK_DEFINE_ARRAY(accepted_proposal, accepted_value);
 
  private:
   friend class Paxos;
-
-  uint32_t log_index;
 
   uint64_t accepted_proposal;
 
@@ -102,7 +94,6 @@ class Paxos {
 
   void reset(Log *log) {
     std::lock_guard<std::recursive_mutex> lock(mutex);
-    log->log_index = 0;
     log->accepted_proposal = INVALID_PROPOSAL;
     log->accepted_value.clear();
     persist();
@@ -110,7 +101,7 @@ class Paxos {
 
   uint32_t get_log_index(const Log *log) const {
     std::lock_guard<std::recursive_mutex> lock(mutex);
-    return log->log_index;
+    return log - &logs[0];
   }
 
   Log * get_log(const uint32_t log_index) {
@@ -130,11 +121,24 @@ class Paxos {
   void get_logs(std::string *buf) {
     std::lock_guard<std::recursive_mutex> lock(mutex);
     std::stringstream ss;
+
+    //std::string debug_string;
     for (int i = 0; i < MAX_LOG_COUNT; ++i) {
+      //debug_string += "<<<< " + std::to_string(i++);
       clmdep_msgpack::pack(ss, logs[i]);
+      //debug_string += " [" + std::to_string(logs[i].accepted_proposal) + "|" + logs[i].accepted_value;
+      //debug_string += ">>>>";
     }
     *buf = std::move(ss.str());
   }
+
+  void get_min_pro_and_first_unchosen(uint64_t *min_prop, 
+                                      uint32_t *first_unchosen) {
+    std::lock_guard<std::recursive_mutex> lock(mutex);
+    *min_prop = min_proposal;
+    *first_unchosen = first_unchosen_index;
+  }
+
 
   MSGPACK_DEFINE_ARRAY(max_round, min_proposal, logs);
 

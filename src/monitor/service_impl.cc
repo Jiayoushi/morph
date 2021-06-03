@@ -34,6 +34,8 @@ MonitorServiceImpl::MonitorServiceImpl(const Config &config):
 
   heartbeat_thread = std::make_unique<std::thread>(
     &MonitorServiceImpl::heartbeat_routine, this);
+
+  logger->info(fmt::sprintf("Monitor service constructor completed"));
 }
 
 
@@ -180,7 +182,7 @@ grpc::Status MonitorServiceImpl::accept(ServerContext *context,
                                       const AcceptRequest* request,
                                       AcceptReply *reply) {
   uint64_t min_proposal;
-  uint64_t first_unchosen_index;
+  uint32_t first_unchosen_index;
   int ret_val = S_SUCCESS;
 
   logger->info(fmt::sprintf(
@@ -198,10 +200,11 @@ grpc::Status MonitorServiceImpl::accept(ServerContext *context,
                                           &first_unchosen_index);
 
   logger->info(fmt::sprintf(
-    "accept request received: index[%d] first_unchosen[%lu] proposal[%s]"
-    " value[%s]. Return ret [%d]",
+    "accept request processed: index[%d] first_unchosen[%lu] proposal[%s]"
+    " value[%s]. Return ret [%d], first_unchosen[%lu] min_proposal[%lu]",
     request->log_index(), request->first_unchosen_index(),
-    uint64_two(request->proposal()), request->value(), ret_val
+    uint64_two(request->proposal()), request->value(), ret_val,
+    first_unchosen_index, min_proposal
   ));
 
   reply->set_first_unchosen_index(first_unchosen_index);
@@ -238,7 +241,7 @@ grpc::Status MonitorServiceImpl::success(ServerContext *context,
   uint32_t first = paxos_service->get_first_unchosen_index();
 
   logger->info(fmt::sprintf(
-    "success request processed: index[%d] proposal[%s]. Old version[%lu], "
+    "success request processed: index[%d] value[%s]. Old version[%lu], "
     " New version[%lu]. Return first_unchosen[%lu]",
     request->log_index(), request->value(), current_version, new_version, first
   ));

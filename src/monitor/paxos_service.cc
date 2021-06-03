@@ -27,6 +27,8 @@ PaxosService::PaxosService(const std::string &this_name,
       sync_cbs[p->second->info.name] = new SyncControlBlock(p->second, this);
     }
   }
+
+  logger->info(fmt::sprintf("PaxoseService constructor finished."));
 }
 
 PaxosService::~PaxosService() {
@@ -51,13 +53,14 @@ int PaxosService::prepare_handler(const std::string &proposer,
 }
 
 int PaxosService::accept_handler(const std::string &proposer,
-                                  const uint32_t log_index,
-                                  const uint32_t first_unchosen,
-                                  const uint64_t proposal,
-                                  const std::string &value,
-                                  uint64_t *min_proposal,
-                                  uint64_t *first_unchosen_index) {
+                                 const uint32_t log_index,
+                                 const uint32_t first_unchosen,
+                                 const uint64_t proposal,
+                                 const std::string &value,
+                                 uint64_t *min_proposal,
+                                 uint32_t *first_unchosen_index) {
   set_instance_first_unchosen_index(proposer, first_unchosen);
+  paxos->get_min_pro_and_first_unchosen(min_proposal, first_unchosen_index);
   if (!is_leader(proposer)) {
     return S_NOT_LEADER;
   }
@@ -329,8 +332,6 @@ std::unique_ptr<uint64_t> PaxosService::send_accept_until(
 void PaxosService::send_success(
            std::shared_ptr<MonitorInstance> instance, 
            const uint32_t log_index, 
-           const uint32_t first_unchosen_index,
-           const uint64_t proposal,
            const std::string &value) {
   monitor_rpc::SuccessRequest request;
   request.set_log_index(log_index);
@@ -344,20 +345,17 @@ void PaxosService::send_success(
       std::chrono::system_clock::now() + std::chrono::milliseconds(1000);
     ctx.set_deadline(deadline);
 
-    uint64_t remote_fu = get_instance_first_unchosen_index(instance->info.name);
-
     logger->info(fmt::sprintf(
-      "[SUCCESS] request to monitor[%s] fu[%lu]: index[%d] first_unchosen[%lu] proposal[%s] value[%s]",
-      instance->info.name.c_str(), remote_fu, log_index, first_unchosen_index, 
-      uint64_two(proposal), value.c_str()
+      "[SUCCESS] request to monitor[%s]: index[%d] value[%s]",
+      instance->info.name.c_str(), log_index, value.c_str()
     ));
 
     auto status = instance->stub->success(&ctx, request, &reply);
 
     logger->info(fmt::sprintf(
-      "[SUCCESS] reply from monitor[%s] fu[%lu]. index[%d] first_unchosen[%lu] proposal[%s] "
+      "[SUCCESS] reply from monitor[%s]. index[%d] "
       " Result: rpc[%d], first_unchosen[%lu]",
-      instance->info.name, remote_fu, log_index, first_unchosen_index, uint64_two(proposal), 
+      instance->info.name, log_index,
       status.error_code(), reply.first_unchosen_index()
     ));
 
@@ -373,7 +371,7 @@ void PaxosService::send_success(
 
 void PaxosService::sync_routine(PaxosService::SyncControlBlock *scb) {
   while (running) {
-    while (running && is_leader(this_name) && scb->need_sync()) {
+    while (running && scb->need_sync()) {
       uint32_t log_index = scb->get_first_unchosen_index();
       uint64_t log_proposal;
       std::string log_value;
@@ -386,9 +384,7 @@ void PaxosService::sync_routine(PaxosService::SyncControlBlock *scb) {
         assert(false);
       }
 
-      send_success(scb->instance, log_index, 
-                   paxos->get_first_unchosen_index(),
-                   log_proposal, log_value);
+      send_success(scb->instance, log_index, log_value);
     }
 
     std::unique_lock<std::mutex> lock(scb->mutex);

@@ -59,7 +59,7 @@ class PaxosService {
                      const uint64_t proposal, 
                      const std::string &value,
                      uint64_t *min_proposal,
-                     uint64_t *first_unchosen_index);
+                     uint32_t *first_unchosen_index);
 
   void success_handler(const uint32_t log_index,
                        const std::string &value);
@@ -149,22 +149,26 @@ class PaxosService {
 
   void send_success(std::shared_ptr<MonitorInstance> instance, 
                     const uint32_t log_index,
-                    const uint32_t first_unchosen_index,
-                    const uint64_t proposal,
                     const std::string &value);
 
   void sync_routine(PaxosService::SyncControlBlock *scb);
 
   void set_instance_first_unchosen_index(const std::string &name, const uint64_t first) {
     auto scb = sync_cbs.find(name);
-    assert(scb != sync_cbs.end());
-    scb->second->set_first_unchosen_index(first);
+    if (scb != sync_cbs.end()) {
+      scb->second->set_first_unchosen_index(first);
+    }
   }
 
-  uint64_t get_instance_first_unchosen_index(const std::string &name) {
+  int get_instance_first_unchosen_index(const std::string &name, uint64_t *first) {
     auto scb = sync_cbs.find(name);
-    assert(scb != sync_cbs.end());
-    return scb->second->get_first_unchosen_index();
+    if (scb == sync_cbs.end()) {
+      logger->info(fmt::sprintf("failed to get sync control block for monitor [%s]",
+        name.c_str()));
+      return -1;
+    }
+    *first = scb->second->get_first_unchosen_index();
+    return 0;
   }
 
   const std::string this_name;

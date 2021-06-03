@@ -33,7 +33,7 @@ Paxos::Paxos(const std::string &name):
   } else {
     logs.reserve(MAX_LOG_COUNT);
     for (uint32_t i = 0; i < MAX_LOG_COUNT; ++i) {
-      logs.emplace_back(i);
+      logs.emplace_back();
     }
   }
 
@@ -135,6 +135,7 @@ uint64_t Paxos::choose_new_proposal_number() {
     assert(proposal != min_proposal);
   } while (proposal < min_proposal);
 
+  min_proposal = proposal;
   persist();
   return proposal;
 }

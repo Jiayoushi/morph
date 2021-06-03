@@ -306,11 +306,13 @@ class ClusterTester {
 TEST(Monitor, FaultTolerant) {
   ClusterTester tester(5);
  
+  // #0
   fprintf(stderr, "test majority consensus when network is okay\n");
   tester.add_oss();
   std::this_thread::sleep_for(std::chrono::milliseconds(500));
   ASSERT_TRUE(tester.majority_consensus_reached());
 
+  // #1
   tester.add_oss();
   std::this_thread::sleep_for(std::chrono::milliseconds(500));
   ASSERT_TRUE(tester.majority_consensus_reached());
@@ -319,32 +321,38 @@ TEST(Monitor, FaultTolerant) {
   tester.shutdown(0);
   tester.shutdown(1);
 
+  // #2
   fprintf(stderr, "test majority consensus when two nodes down\n");
   tester.add_oss();
   std::this_thread::sleep_for(std::chrono::milliseconds(500));
   ASSERT_TRUE(tester.majority_consensus_reached());
   fprintf(stderr, "passed\n\n");
 
+  // #3
   fprintf(stderr, "test consensus when nodes restart\n");
   tester.restart(0);
   tester.add_oss();
 
+  // #4
   tester.restart(1);
   tester.add_oss();
-  std::this_thread::sleep_for(std::chrono::seconds(2));
+  std::this_thread::sleep_for(std::chrono::seconds(3));
   ASSERT_TRUE(tester.consensus_reached());
   fprintf(stderr, "passed\n\n");
 
+  // #5
   fprintf(stderr, "test majority consensus after leader node is down\n");
   tester.shutdown(4);
   tester.add_oss();
-  std::this_thread::sleep_for(std::chrono::seconds(1));
+  std::this_thread::sleep_for(std::chrono::seconds(3));
   ASSERT_TRUE(tester.majority_consensus_reached());
   fprintf(stderr, "passed\n\n");
 
+  // #6
   fprintf(stderr, "test consensus after leader node is restarted\n");
   tester.restart(4);
-  std::this_thread::sleep_for(std::chrono::seconds(1));
+  tester.add_oss();
+  std::this_thread::sleep_for(std::chrono::seconds(3));
   ASSERT_TRUE(tester.consensus_reached());
   fprintf(stderr, "passed\n\n");
 }
