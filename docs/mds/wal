@@ -1,0 +1,44 @@
+Write Ahead Logging
+
+Overview
+  The current implementation of mds logging mechanism is borrowed from leveldb's wal.
+  Each metadata operation is logged, synced and then returned to the user.
+
+Implementation details
+  Below is some basic description of how leveldb's wal work, there are possibly some minor changes 
+  to the original source code.
+
+Record Format
+  [HEADER][CONTENT]
+
+  HEADER
+    [checksum 4 byte][length 2 bytes][type 1 byte]
+
+Log File Format
+  [Record][Record].....[Record]     [Record][Record]......
+  [-----------BLOCK_SIZE-----------][----------BLOCK_SIZE----------]
+  [----------------------------MAX_LOG_FILE_SIZE-------------------]
+  If the size of a record fits inside a block, its type will be FULL.
+  If there are less than the size of a header left in the block, then the left blocks are discarded
+  and switched to the new block.
+  The length here is 2 bytes, which means a record can have a maximum of 65536 bytes. Note an operation
+  can have more than 65536 bytes, but a record can not exceed that.
+
+  [FIRST------][---MIDDLE--][---MIDDLE--][-LAST-]
+  [---block---][---block---][---block---][---block---]
+  When the record size does not fit into a block, it can be split into FIRST and LAST to fit into two
+  blocks. Or be split into FIRST, MIDDLE, LAST to fit into three or more blocks like above.
+
+Logging the Current Operation 
+  An operation is built into a WriteBatch. And when logging this operation, it will be inserted into
+  the back of a writers queue as a writer. It will wake up when the other thread that is currently
+  writing these logs are finished. When it wakes up, it will first check if the current log file
+  has reached the limit size, if so, create a new one first. Then, it will try to see if there are
+  other logs waiting in the writers, and it will try to put these logs into its writebatch. A sync
+  write will not include other non-sync write into its batch, it's probably because leveldb does not
+  want the sync write caller to wait for non-sync writes. The wal in morph are used like transactions,
+  which needs to ensure the ordering of logs. So sync writes and non-sync writes can be merged into 
+  one. After all is done, the combined writebatch is appended to the log file. 
+
+Sync to Object Store
+  Periodically the immutable logs files that are are read, parsed and sent to oss using rpc calls.

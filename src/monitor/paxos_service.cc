@@ -28,6 +28,9 @@ PaxosService::PaxosService(const std::string &this_name,
     }
   }
 
+  // Get the 
+  run_accepted();
+
   logger->info(fmt::sprintf("PaxoseService constructor finished."));
 }
 
