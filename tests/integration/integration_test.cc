@@ -2,7 +2,7 @@
 
 #include <grpcpp/grpcpp.h>
 
-#include "monitor/monitor.h"
+#include "src/monitor/monitor.h"
 #include "os/oss.h"
 #include "mds/mds.h"
 #include "monitor/config.h"

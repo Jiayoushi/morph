@@ -2,8 +2,8 @@
 #include <os/object_store.h>
 #include <tests/utils.h>
 
-#include "common/filename.h"
-#include "os/error_code.h"
+#include "src/common/filename.h"
+#include "src/os/error_code.h"
 
 namespace morph {
 namespace test {

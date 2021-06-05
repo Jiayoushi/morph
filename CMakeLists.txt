@@ -45,15 +45,15 @@ FILE(GLOB MONITOR_SRC_FILES src/monitor/*.cc)
 
 add_executable(common_test
   ${COMMON_SRC_FILES}
-  src/tests/common/consistent_hash_test.cc)
+  tests/common/consistent_hash_test.cc)
 add_executable(namespace_test
   ${COMMON_SRC_FILES}
   ${MDS_SRC_FILES}
-  src/tests/mds/namespace_test.cc)
+  tests/mds/namespace_test.cc)
 add_executable(monitor_test
   ${COMMON_SRC_FILES}
   ${MONITOR_SRC_FILES}
-  src/tests/monitor/monitor_test.cc)
+  tests/monitor/monitor_test.cc)
 add_executable(block_store_test
   src/common/filename.cc
   src/common/env_posix.cc
@@ -63,19 +63,19 @@ add_executable(block_store_test
   src/os/block_store.cc
   src/os/buffer.cc
   src/os/transaction.cc
-  src/tests/os/block_store_test.cc)
+  tests/os/block_store_test.cc)
 add_executable(object_store_test
   ${COMMON_SRC_FILES}
   ${OS_SRC_FILES}
-  src/tests/os/object_store_test.cc)
+  tests/os/object_store_test.cc)
 add_executable(third_party_test
-  src/tests/third_party.cc)
+  tests/third_party.cc)
 add_executable(integration_test
   ${MDS_SRC_FILES}
   ${OS_SRC_FILES}
   ${COMMON_SRC_FILES}
   ${MONITOR_SRC_FILES}
-  src/tests/integration/integration_test.cc)
+  tests/integration/integration_test.cc)
 
 add_library(morph_grpc_proto
   ${PROTO_PB_HEADER}
