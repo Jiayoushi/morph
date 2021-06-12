@@ -1,3 +1,29 @@
+Monitor implemented a simple multi-paxos to provide a consistent view of the object store
+cluster map which is used to do consistent hashing.
+
+When an oss (object store server) wants to add itself to the monitor, it invokes the AddOss
+RPC. The monitor will ask paxos to replicate this command before applying it. Only the leader
+monitor can propose values to the paxos, which avoids the paxos livelock problem.
+
+A leader is picked by an implicit rule: the server that is alive and with the highest id is
+the current leader. Every monitor is sending out hearbeats to let others know they are alive. 
+This can be costly only if the number of monitors is too much. 
+
+When paxos starts on a value, it will first check if there is any log that is accepted 
+but not yet chosen. If so, Morph's paxos will propose that value first, which makes the 
+changes of oss cluster monotonically (it's not possible for the cluster change to go 
+from config#0 to config#2 without going to #1 first). After paxos gets a log index that 
+has no previous accepted value, paxos sets that log entry to accepted with the given value
+and starts proposing to all acceptors. After the majority replies, it checks if there is 
+any value already accepted, if so, it will use that value instead. Then, the paxos will
+send Commit RPC to all acceptors to commit the value and wait for a majority of responses.
+Only if no acceptors from the majority has a larger min_proposal is the value considered
+to be chosen.
+
+Log compaction, client protocol and cluster membership change of the monitor cluster itself 
+and so on are not yet implemented. The two-phase approach can be optimized into one as well.
+
+
 Replication:
    Keep sending Accept RPC until leader and other servers have identical first_unchosen_index.
 

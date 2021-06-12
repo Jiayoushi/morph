@@ -1,0 +1,19 @@
+Object store uses Rocksdb to save object's metadata and transactions.
+When a write of large size comes in, the data is first written to disk
+and then all related metadata changes are inserted into Rocksdb. 
+
+When a write of small size comes in, both data and metadata are inserted 
+into Rocksdb as a transaction, and then written to disk after the 
+transaction is comitted (safe on disk). 
+
+Replication is made after the writes are on the local disk.
+
+The writes and replications are async, so that users will receive a success
+response right after async calls are made, even though the data have not
+reached the disk yet. It implies that a success write call will be lost
+and it is possible to read stale data from a object store server that is
+not primary.
+
+It uses a LRU write-back buffer cache, which entails that a read will 
+immediately return as long as the buffer is dirty, even though the data
+in the buffer has not reached the disk.
