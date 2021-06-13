@@ -122,12 +122,8 @@ class Paxos {
     std::lock_guard<std::recursive_mutex> lock(mutex);
     std::stringstream ss;
 
-    //std::string debug_string;
     for (int i = 0; i < MAX_LOG_COUNT; ++i) {
-      //debug_string += "<<<< " + std::to_string(i++);
       clmdep_msgpack::pack(ss, logs[i]);
-      //debug_string += " [" + std::to_string(logs[i].accepted_proposal) + "|" + logs[i].accepted_value;
-      //debug_string += ">>>>";
     }
     *buf = std::move(ss.str());
   }
