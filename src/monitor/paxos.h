@@ -140,7 +140,7 @@ class Paxos {
   }
 
 
-  MSGPACK_DEFINE_ARRAY(max_round, min_proposal, logs);
+  MSGPACK_DEFINE_ARRAY(min_proposal, logs);
 
  private:
   void run(Log *log, const std::string &value);
@@ -179,8 +179,6 @@ class Paxos {
   const static int MAX_LOG_COUNT = 1000;
 
   std::vector<Log> logs;
-
-  uint32_t max_round;
 
   // This server will generate proposals that are bigger than this
   // Monotonically increased

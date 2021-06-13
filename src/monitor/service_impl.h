@@ -9,7 +9,7 @@
 #include "common/cluster.h"
 #include "common/logger.h"
 #include "paxos_service.h"
-#include "cluster_manager.h"
+#include "common/cluster_manager.h"
 
 namespace morph {
 

@@ -10,7 +10,7 @@ namespace paxos {
 Paxos::Paxos(const std::string &name):
     this_name(name),
     server_id(std::hash<std::string>()(name)),
-    max_round(0), min_proposal(INVALID_PROPOSAL),
+    min_proposal(INVALID_PROPOSAL),
     first_unchosen_index(0),
     persister(paxos_file_name(name)) {
 
@@ -41,9 +41,9 @@ Paxos::Paxos(const std::string &name):
   persister.get_persisted(&v);
 
   logger->info(fmt::sprintf(
-    "Paxos initialization completed: max_round[%lu] min_proposal[%zu] "
+    "Paxos initialization completed: min_proposal[%zu] "
     "first_unchosen_index[%zu] persister_size[%zu] hash[%zu]",
-    max_round, min_proposal, first_unchosen_index, persister.size(),
+    min_proposal, first_unchosen_index, persister.size(),
     std::hash<std::string>()(v)));
 }
 
@@ -52,9 +52,9 @@ Paxos::~Paxos() {
   persister.get_persisted(&v);
 
   logger->info(fmt::sprintf(
-    "Exit... max_round[%lu] min_proposal[%zu] "
+    "Exit... min_proposal[%zu] "
     "first_unchosen_index[%zu] persister_size[%zu] hash[%zu]\n\n\n\n",
-    max_round, min_proposal, first_unchosen_index, persister.size(),
+    min_proposal, first_unchosen_index, persister.size(),
     std::hash<std::string>()(v)));
 }
 
@@ -128,19 +128,19 @@ uint64_t Paxos::choose_new_proposal_number() {
 
   assert(log != nullptr);
   uint64_t proposal;
+  uint64_t max_round = min_proposal >> 32;
 
-  do {
-    ++max_round;
-    proposal = to_proposal(max_round, server_id);
-    assert(proposal != min_proposal);
-  } while (proposal < min_proposal);
+  ++max_round;
+  proposal = to_proposal(max_round, server_id);
+  assert(proposal > min_proposal);
 
   min_proposal = proposal;
   persist();
-  return proposal;
+  return min_proposal;
 }
 
-uint64_t Paxos::to_proposal(const uint32_t max_round, const uint32_t server_id) {
+uint64_t Paxos::to_proposal(const uint32_t max_round, 
+                            const uint32_t server_id) {
   uint64_t a = max_round;
   a <<= 32;
   a += std::numeric_limits<uint32_t>::max();
