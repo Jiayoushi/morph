@@ -19,7 +19,7 @@ class MetadataServer: NoCopy {
  public:
   MetadataServer(const std::string &name,
                  const NetworkAddress &mds_addr, 
-                 const monitor::Config &monitor_config);
+                 const Config &monitor_config);
 
   ~MetadataServer();
 

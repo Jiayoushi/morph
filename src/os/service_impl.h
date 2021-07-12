@@ -6,6 +6,7 @@
 
 #include "common/config.h"
 #include "common/cluster.h"
+#include "common/cluster_manager.h"
 #include "common/logger.h"
 #include "object_store.h"
 
@@ -118,7 +119,8 @@ class ObjectStoreServiceImpl final: public GrpcOssService {
   std::shared_ptr<MonitorServiceInstance> primary_monitor;
   Cluster<monitor_rpc::MonitorService> monitor_cluster;
 
-  Cluster<oss_rpc::ObjectStoreService> oss_cluster;
+  //Cluster<oss_rpc::ObjectStoreService> oss_cluster;
+  ClusterManager<OssCluster> oss_cluster_manager;
 
   std::atomic<bool> running;
   std::atomic<uint32_t> outstanding;   // Number of operations not finished

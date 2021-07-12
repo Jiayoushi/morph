@@ -79,7 +79,7 @@ class Cluster {
       CreateChannel(mds_addr, grpc::InsecureChannelCredentials()));
   }
 
-  monitor::Config monitor_config;
+  Config monitor_config;
 
   std::shared_ptr<Mds> mds;
   std::vector<std::shared_ptr<Monitor>> mons;

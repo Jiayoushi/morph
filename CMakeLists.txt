@@ -66,7 +66,13 @@ add_executable(block_store_test
   tests/os/block_store_test.cc)
 add_executable(object_store_test
   ${COMMON_SRC_FILES}
-  ${OS_SRC_FILES}
+  src/os/block_allocator.cc
+  src/os/block_store.cc
+  src/os/buffer.cc
+  src/os/transaction.cc
+  src/os/object.cc
+  src/os/kv_store.cc
+  src/os/object_store.cc
   tests/os/object_store_test.cc)
 add_executable(third_party_test
   tests/third_party.cc)

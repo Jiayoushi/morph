@@ -19,7 +19,7 @@ class ObjectStoreServer: NoCopy {
  public:
   ObjectStoreServer(const std::string &name,
                     const NetworkAddress &this_addr, 
-                    const monitor::Config &monitor_config, 
+                    const Config &monitor_config, 
                     const ObjectStoreOptions &opts = ObjectStoreOptions());
 
   ~ObjectStoreServer();

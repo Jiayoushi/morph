@@ -39,7 +39,7 @@ TEST(Monitor, ConnectToMonitor) {
   uint64_t version = 0;
   std::vector<ObjectStoreServer *> oss_servers;
   grpc::Status s;
-  monitor::Config monitor_config;
+  Config monitor_config;
   monitor_config.infos.emplace_back("monitor", monitor_addr);
   GetOssClusterRequest get_oss_cluster_request;
   GetOssClusterReply get_oss_cluster_reply;
@@ -94,7 +94,7 @@ TEST(Oss, Replication) {
   auto ch = CreateChannel(monitor_addr, grpc::InsecureChannelCredentials());
   std::unique_ptr<MonitorStub> stub = monitor_rpc::MonitorService::NewStub(ch);
 
-  monitor::Config monitor_config;
+  Config monitor_config;
   monitor_config.infos.emplace_back("mon0", monitor_addr);
   std::vector<ObjectStoreServer *> storage_servers;
   std::vector<std::shared_ptr<OssStub>> storage_stubs;

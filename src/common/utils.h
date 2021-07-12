@@ -42,6 +42,18 @@ class Flags {
  public:
   std::atomic<std::bitset<T>> bits;
 
+  Flags():
+    bits() {}
+
+  Flags(const Flags<T> &src) {
+    bits.store(src.bits.load());
+  }
+
+  Flags<T> & operator=(const Flags<T> &src) {
+    bits.store(src.bits.load());
+    return *this;
+  }
+
   void mark(uint32_t fg) {
     bits.store(bits.load().set(fg));
   }

@@ -346,6 +346,8 @@ void ObjectStore::object_small_write(std::shared_ptr<Object> object,
       obj_meta_changed = true;
       new_blocks = new_blocks == 0 ? lbn_end - lbn : new_blocks - 1;
     }
+    
+    // TODO(required): if the buffer is comitting, need to copy the buffer
 
     write_buffer(object, buffer, data_ptr, buf_off, write_len);
     log_handle->put(CF_INDEX::CF_OBJ_DATA,

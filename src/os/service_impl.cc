@@ -32,7 +32,7 @@ ObjectStoreServiceImpl::ObjectStoreServiceImpl(
   // Copy the monitor cluster config into this data structure
   assert(monitor_config.infos.size() == 1);
   for (const Info &info: monitor_config.infos) {
-    monitor_cluster.add_instance(info.name, info.addr);
+    monitor_cluster.add_instance(info);
   }
 
   // TODO: right now there is only one monitor
@@ -136,17 +136,17 @@ grpc::Status ObjectStoreServiceImpl::put_object(ServerContext *context,
                             request->expect_primary())) {
     ret_val = request->expect_primary() ? NOT_PRIMARY : NOT_REPLICATION_GROUP;
   } else {
-    Operation *op = new Operation(PUT_OBJECT, request->object_name(), 
-                                  "", request->body(), request->offset());
-    std::function<void(void)> on_apply_cb = nullptr;
-    if (request->expect_primary()) {
-      on_apply_cb = [this, op]() {
-        this->on_op_finish(op);
-      };
-    }
+    // TODO: Use two threads to call replicate on replica servers
+    // return success after both are success.
 
     ret_val = object_store.put_object(
-      request->object_name(), request->offset(), request->body(), on_apply_cb);
+      request->object_name(), request->offset(), request->body(), nullptr);
+
+    Operation *op = new Operation(PUT_OBJECT, request->object_name(), 
+                                  "", request->body(), request->offset());
+    if (request->expect_primary()) {
+      replicate(op); 
+    }
   }
 
   logger->info(fmt::sprintf("version[%d]: put_object object[%s]. Return %d\n",
@@ -280,37 +280,37 @@ void ObjectStoreServiceImpl::replicate(Operation *op) {
   // TODO(required): what if the cluster has now changed?
   assert(this_name == replication_group[0]->name);
 
-  for (int i = 1; i <= 2; ++i) {
-    if (op->op_type == PUT_OBJECT) {
-      auto backup_oss = replication_group[i];
+  if (op->op_type == PUT_OBJECT) {
+    auto backup_oss = replication_group[i];
 
-      grpc::ClientContext ctx;
-      PutObjectRequest request;
-      PutObjectReply reply;
-      grpc::Status s;
+    grpc::ClientContext ctx;
+    PutObjectRequest request;
+    PutObjectReply reply;
+    grpc::Status s;
 
-      request.set_object_name(op->object_name);
-      request.set_offset(op->offset);
-      request.set_body(op->value);
-      request.set_expect_primary(false);
+    request.set_object_name(op->object_name);
+    request.set_offset(op->offset);
+    request.set_body(op->value);
+    request.set_expect_primary(false);
 
-      logger->info(fmt::sprintf( 
-        "oss[%s] version[%d] ask oss[%s] to replicate object[%s] body[%s].\n",
-        this_name.c_str(), oss_cluster.get_version(), 
-        backup_oss->name.c_str(), op->object_name.c_str(), op->value));
+    logger->info(fmt::sprintf( 
+      "oss[%s] version[%d] ask oss[%s] to replicate object[%s] body[%s].\n",
+      this_name.c_str(), oss_cluster.get_version(), 
+      backup_oss->name.c_str(), op->object_name.c_str(), op->value));
 
-      s = backup_oss->stub->put_object(&ctx, request, &reply);
+    s = backup_oss->stub->put_object(&ctx, request, &reply);
 
-      logger->info(fmt::sprintf(
-        "oss[%s] version[%d] ask oss[%s] to replicate object[%s]. "
-        "Grpc return code: %d. Morph return code %d\n",
-        this_name.c_str(), oss_cluster.get_version(), 
-        backup_oss->name.c_str(), op->object_name.c_str(), 
-        s.error_code(), reply.ret_val()));
+    logger->info(fmt::sprintf(
+      "oss[%s] version[%d] ask oss[%s] to replicate object[%s]. "
+      "Grpc return code: %d. Morph return code %d\n",
+      this_name.c_str(), oss_cluster.get_version(), 
+      backup_oss->name.c_str(), op->object_name.c_str(), 
+      s.error_code(), reply.ret_val()));
 
-      assert(s.ok());
-      assert(reply.ret_val() == 0);
-    }
+    assert(s.ok());
+    assert(reply.ret_val() == 0);
+  } else {
+    assert("NOT IMPLEMENTED YET");
   }
 }
 

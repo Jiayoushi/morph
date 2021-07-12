@@ -106,9 +106,6 @@ class ObjectStore {
 
   // Called by the kv_store after a write call is journaled
   void submit_request(IoRequest *request) {
-    for (Buffer *buffer: request->buffers) {
-      buffer->mutex.lock();
-    }
     block_store.submit_request(request);
   }
 

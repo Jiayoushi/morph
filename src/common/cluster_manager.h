@@ -10,7 +10,6 @@
 #include "common/cluster.h"
 
 namespace morph {
-namespace monitor {
 
 using MonitorService = monitor_rpc::MonitorService;
 using MonitorCluster = Cluster<MonitorService>;
@@ -132,7 +131,6 @@ class ClusterManager {
   std::shared_ptr<ClusterType> next;
 };
 
-} // namepsace monitor
 } // namespace morph
 
 #endif

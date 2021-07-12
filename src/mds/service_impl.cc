@@ -13,7 +13,7 @@ namespace mds {
 
 MetadataServiceImpl::MetadataServiceImpl(const std::string &name,
                                          const NetworkAddress &addr,
-                                         const monitor::Config &monitor_config,
+                                         const Config &monitor_config,
                                          const std::shared_ptr<spdlog::logger> lg,
                                          const bool need_recover):
     this_name(name), this_addr(addr), logger(lg), name_space(name, need_recover) {

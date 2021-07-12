@@ -6,7 +6,7 @@
 #include <proto_out/oss.grpc.pb.h>
 
 #include "namespace.h"
-#include "monitor/config.h"
+#include "common/config.h"
 
 namespace morph {
 
@@ -23,7 +23,7 @@ class MetadataServiceImpl final: public mds_rpc::MetadataService::Service {
  public:
   MetadataServiceImpl(const std::string &name,
                       const NetworkAddress &addr,
-                      const monitor::Config &monitor_config,
+                      const Config &monitor_config,
                       const std::shared_ptr<spdlog::logger> logger,
                       const bool recover);
 
