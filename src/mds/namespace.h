@@ -86,7 +86,7 @@ class Namespace: NoCopy {
 
   std::shared_ptr<spdlog::logger> logger;
 
-  std::mutex mutex;
+  std::mutex wal_mutex;
 
   InodeDirectory *root;
   std::atomic<InodeNumber> next_inode_number;

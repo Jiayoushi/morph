@@ -336,12 +336,13 @@ void Namespace::remove_inode(InodeNumber ino) {
 Status Namespace::write_to_log(bool sync, WriteBatch *updates) {
   assert(updates != nullptr);
 
-  Writer w(&mutex);
+  Writer w(&wal_mutex);
   w.batch = updates;
   w.sync = sync;
   w.done = false;
 
-  std::unique_lock<std::mutex> lock(mutex);
+  // Wait until I am allowed to write my log or somebody has written my log
+  std::unique_lock<std::mutex> lock(wal_mutex);
   writers.push_back(&w);
   w.cv.wait(lock, [&w, this](){
     return w.done || &w == this->writers.front();
@@ -361,7 +362,11 @@ Status Namespace::write_to_log(bool sync, WriteBatch *updates) {
     // Add log. We can release the lock
     // during this phase since &w is currently responsible for logging
     // and protects against concurrent logger
-    mutex.unlock();
+    // 
+    // Specifically, a lot of writers can be pushed back to the writer queue
+    // after lock is released, but they will not wake up because the 
+    // current writer wiil not wake them up until done.
+    wal_mutex.unlock();
     status = log_writer->add_record(WriteBatchInternal::contents(write_batch));
     bool sync_error = false;
     if (status.is_ok() && sync) {
@@ -372,7 +377,7 @@ Status Namespace::write_to_log(bool sync, WriteBatch *updates) {
       logged_batch_size += write_batch->approximate_size();
     }
 
-    mutex.lock();
+    wal_mutex.lock();
     if (sync_error) {
       // The state of the log file is indeterminate: the log record we
       // just added may or may not show up when the DB is re-opened.
@@ -386,14 +391,22 @@ Status Namespace::write_to_log(bool sync, WriteBatch *updates) {
     sequence_number = last_sequence;
   }
 
+  // Try to wake up writers are built into a batch group
+  // by the current writer.
   while (true) {
     Writer *ready = writers.front();
     writers.pop_front();
+
+    // This condition will evaluate to true only if last_writer
+    // is not the head of the writer. Which means some writers
+    // are built into a batch group, so we need to wake them up
+    // and simply let them exit because they are done.
     if (ready != &w) {
       ready->status = status;
       ready->done = true;
       ready->cv.notify_all();
     }
+
     if (ready == last_writer) {
       break;
     }
@@ -470,14 +483,24 @@ WriteBatch * Namespace::build_batch_group(Writer **last_writer) {
         break;
       }
 
-      // Append to result
+      // Append to *result
       if (result == first->batch) {
+        // TODO: when would this condition evaluate to true?
+        //       why would a batch be pushed twice?
+        assert(false);
+
         // Switch to temporary batch instead of disturbing caller's batch
         result = tmp_batch;
         assert(WriteBatchInternal::count(result) == 0);
         WriteBatchInternal::append(result, w->batch);
       }
+
+      // TODO: This will directly append a bunch of data to a string, wouldn't
+      // this be slow? Why don't we look once and allocate space and then do
+      // the append? Or a limit of 1MB does not incur much reallocation?
+      WriteBatchInternal::append(result, w->batch);
     }
+
     *last_writer = w;
   }
   return result;
