@@ -9,7 +9,7 @@
 #include "namespace.h"
 #include "service_impl.h"
 #include "common/network.h"
-#include "monitor/config.h"
+#include "common/config.h"
 
 namespace morph {
 

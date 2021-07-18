@@ -7,6 +7,7 @@
 
 #include "namespace.h"
 #include "common/config.h"
+#include "common/cluster.h"
 
 namespace morph {
 

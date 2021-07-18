@@ -81,6 +81,8 @@ class Namespace: NoCopy {
 
   void init_wal();
 
+  void write_dirty_inode_routine();
+
 
   const std::string this_name;
 
@@ -91,6 +93,18 @@ class Namespace: NoCopy {
   InodeDirectory *root;
   std::atomic<InodeNumber> next_inode_number;
   std::unordered_map<InodeNumber, Inode *> inode_map;
+
+  std::atomic<bool> running;
+  
+  
+  std::unique_ptr<std::thread> write_dirty_inode_thread;
+  // Swap dirty_inodes list with this. This list is ready to write to OSD
+  std::unique_ptr<BlockingQueue<Inode *>> ready_dirty_inodes; 
+  // Add new dirty inodes into this list 
+  std::unique_ptr<BlockingQueue<Inode *>> dirty_inodes;
+  std::condition_variable dirty_inodes_cv;
+  std::mutex dirty_inodes_lock;
+
 
   uint64_t logfile_number;
   uint64_t sequence_number;

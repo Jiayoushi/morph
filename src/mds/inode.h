@@ -24,7 +24,9 @@ class Inode: NoCopy {
   mode_t mode;
   uid_t uid;
   uint32_t links;             // Number of hard links.
+  bool is_dirty = false;
 
+  // TODO: better use a read write lock
   std::mutex mutex;
 
   MSGPACK_DEFINE_ARRAY(type, ino, mode, uid, links);
@@ -37,6 +39,14 @@ class Inode: NoCopy {
         const uid_t uid):
     type(type), ino(ino), mode(mode), uid(uid), links(0)
   {}
+
+  void set_dirty(bool v) {
+    is_dirty = v;
+  }
+
+  bool is_dirty() {
+    return is_dirty;
+  }
 
   std::string serialize() {
     std::stringstream ss;

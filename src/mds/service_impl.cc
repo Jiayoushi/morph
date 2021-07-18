@@ -20,7 +20,7 @@ MetadataServiceImpl::MetadataServiceImpl(const std::string &name,
   // Copy the monitor cluster config into this data structure
   assert(monitor_config.infos.size() == 1);
   for (const Info &info: monitor_config.infos) {
-    monitor_cluster.add_instance(info.name, info.addr);
+    monitor_cluster.add_instance(info, nullptr);
   }
 
   // TODO: right now there is only one monitor
@@ -96,6 +96,9 @@ std::string MetadataServiceImpl::get_inode_from_oss(const std::string &name) {
   return reply.value();
 }
 
+
+// TODO: there is no need to do this, let the mds replay this log directly
+//       and sync to OSD later.
 Status MetadataServiceImpl::sync_log_to_oss(const std::string &filename) {
   SequentialFile *file;
   Status status = new_sequential_file(filename, &file);

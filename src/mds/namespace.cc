@@ -40,7 +40,7 @@ struct Namespace::Writer {
 Namespace::Namespace(const std::string &name, const bool need_recover):
     this_name(name),
     root(nullptr),
-    next_inode_number(FIRST_INODE_NUMBER),
+    next_inode_number(FIRST_INODE_NUMBER), running(false),
     logged_batch_size(0), logfile_number(FIRST_LOG_FILE_NUMBER), 
     sequence_number(0), log_writer(nullptr), logfile(nullptr), tmp_batch(nullptr) {
   logger = init_logger(name);
@@ -56,6 +56,11 @@ Namespace::Namespace(const std::string &name, const bool need_recover):
               Slice(root->serialize()));
     assert(write_to_log(true, &batch).is_ok());
   }
+
+  dirty_inodes = std::make_unique<BlockingQueue<Inode *>>();
+
+  write_dirty_inode_thread = std::make_unique<std::thread>(
+                  &Namespace::write_dirty_inode_routine, this);
 }
 
 void Namespace::init_wal() {
@@ -75,6 +80,8 @@ Namespace::~Namespace() {
   delete tmp_batch;
   delete logfile;
   delete log_writer;
+
+  write_dirty_inode_thread->join();
 
   while (!inode_map.empty()) {
     auto iter = inode_map.begin();
@@ -147,11 +154,15 @@ int Namespace::mkdir(uid_t uid, const char *pathname, mode_t mode) {
   WriteBatch batch;
   batch.put(Slice(std::to_string(new_dir->ino)), Slice(new_dir->serialize()));
   batch.put(Slice(std::to_string(parent->ino)), Slice(parent->serialize()));
+
   Status s = write_to_log(true, &batch);
   if (!s.is_ok()) {
     std::cerr << s.to_string() << std::endl;
   }
   assert(s.is_ok());
+
+  dirty_inodes->push(new_dir);
+  dirty_inodes->push(parent);
 
   return 0;
 }
@@ -431,6 +442,12 @@ Status Namespace::make_room_for_log_write() {
     if (!s.is_ok()) {
       return s;
     }
+
+    // TODO: need a way to handle this
+    assert(ready_dirty_inodes == nullptr);
+    ready_dirty_inodes = std::make_unique<BlockingQueue<Inode *>>();
+    std::swap(ready_dirty_inodes, dirty_inodes);
+    dirty_inodes_cv.notify_one();
  
     delete logfile;
     delete log_writer;
@@ -504,6 +521,39 @@ WriteBatch * Namespace::build_batch_group(Writer **last_writer) {
     *last_writer = w;
   }
   return result;
+}
+
+void Namespace::write_dirty_inode_routine() {
+  while (true) {
+    std::unique_lock<std::mutex> lock(dirty_inodes_lock);
+    dirty_inodes_cv.wait(lock, 
+      [this]() {
+        ready_dirty_inodes != nullptr || running = false;
+      });
+
+    if (!running) {
+      break;
+    }
+
+    while (!ready_dirty_inodes->empty()) {
+      Inode *dirty_inode = ready_dirty_inodes->front();
+      ready_dirty_inodes->pop();
+
+      assert(dirty_inode->is_dirty());
+
+      {
+        std::lock_guard<std::mutex> inode_lock(dirty_inode->mutex);
+        Slice key(std::to_string(dirty_inode->ino));
+        Slice value(dirty_inode->serialize();
+      }
+
+      oss_put(key, value);
+
+      dirty_inode->set_dirty(false);
+
+      ready_dirty_inodes.release();
+    }
+  }
 }
 
 } // namespace mds
